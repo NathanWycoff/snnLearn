@@ -18,12 +18,17 @@ t_steps <- length(ts)
 v_thresh <- 1.5
 v_reset <- 0
 
-Ws <- list(matrix(3.5), matrix(3))
 W_in <- matrix(1)
 n_in <- 1
 n_out <- 1
-n_h <- c(1)
+n_h <- c(2,3)
 layers <- 2 + length(n_h)
+#Ws <- list(matrix(c(3.5, 3.4), ncol = 2), matrix(c(3, 2.4), ncol = 1))
+
+# Generate random wieghts
+sizes <- c(n_in, n_h, n_out)
+Ws <- lapply(1:(length(sizes)-1), function(i) 
+             matrix(rnorm(sizes[i]*sizes[i+1], 3), nrow = sizes[i], ncol = sizes[i+1]))
 
 gon <- function(Ws) {
     ## Initialize Voltage Storage
@@ -124,7 +129,6 @@ gon <- function(Ws) {
 
 td <- 4.20
 iters <- 100
-
 for (iter in 1:iters) {
     #Assumes at least 1 hidden layer
     ret <- gon(Ws)
@@ -147,11 +151,11 @@ for (iter in 1:iters) {
     for (l in length(n_h):1) {
         for (neur in 1:n_h[l]) {
             #TODO: d_out not good for more than 1 hidden layer
-            d_h[[l]][neur] <-  d_out * (t(Ws[[l+1]]) %*% ALPHAd[[l+1]][,tai]) /
-                t(Ws[[l]]) %*% ALPHAd[[l]][,tai]
+            d_h[[l]][neur] <-  d_out * (ALPHAd[[l+1]][neur,tai] * sum(Ws[[l+1]][neur,]))  /
+                t(Ws[[l]][,neur]) %*% ALPHAd[[l]][,tai]
         }
     }
-    delta <- rev(d_h)
+    delta <- d_h
     delta[[length(delta)+1]] <- d_out
 
     # No need for input delta unless we have weights from the input function (may do this)
@@ -163,4 +167,3 @@ for (iter in 1:iters) {
         Ws[[wi]] <- Ws[[wi]] - learn_rate * Wd
     }
 } 
-
