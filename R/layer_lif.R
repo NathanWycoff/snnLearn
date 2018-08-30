@@ -10,21 +10,21 @@ n_neurons <- 3
 kern <- function(dt) as.numeric(dt>0) * exp(-dt/tau)
 kernd <- function(dt) as.numeric(dt>0) * -1/tau * exp(-dt/tau)
 
-t_eps <- 0.01
-t_end <- 10
+t_eps <- 1
+t_end <- 20
 ts <- seq(0, t_end, by = t_eps)
 t_steps <- length(ts)
 
 v_thresh <- 1.5
 v_reset <- 0
 
-n_in <- 1
+n_in <- 2
 n_out <- 1
 n_h <- c(1)
 layers <- 2 + length(n_h)
 #Ws <- list(matrix(c(3.5), ncol = 1), matrix(c(3), ncol = 1))
 
-Fin <- list(seq(2.77,t_end, by = 2.77))
+Fin <- list(seq(0,10, by = 1), 10+seq(0,10, by = 1))
 
 # Generate random wieghts
 set.seed(123)
@@ -126,8 +126,8 @@ gon <- function(Ws, Fin) {
 
 gon(Ws, Fin)[[1]]
 
-td <- 4.20
-iters <- 20
+td <- 12
+iters <- 100
 for (iter in 1:iters) {
     #Assumes at least 1 hidden layer
     ret <- gon(Ws, Fin)
@@ -156,8 +156,6 @@ for (iter in 1:iters) {
     }
     delta <- d_h
     delta[[length(delta)+1]] <- d_out
-
-    # No need for input delta unless we have weights from the input function (may do this)
 
     # Calculate weight updates, and apply them
     for (wi in 1:length(Ws)) {
