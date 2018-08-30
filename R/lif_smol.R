@@ -64,7 +64,7 @@ go <- function(w1, w2) {
     return(list(rbind(v1s, v2s, v3s), list(fires1, fires2, fires3)))
 }
 
-old <- go(4,3)
+go(3.5,3)[[2]]
 
 td <- 4.5
 w1_i <- w1_init
