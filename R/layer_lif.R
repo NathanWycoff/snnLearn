@@ -22,14 +22,15 @@ n_in <- 1
 n_out <- 1
 n_h <- c(1)
 layers <- 2 + length(n_h)
-Ws <- list(matrix(c(3.5), ncol = 1), matrix(c(3), ncol = 1))
+#Ws <- list(matrix(c(3.5), ncol = 1), matrix(c(3), ncol = 1))
 
 Fin <- list(seq(2.77,t_end, by = 2.77))
 
 # Generate random wieghts
-#sizes <- c(n_in, n_h, n_out)
-#Ws <- lapply(1:(length(sizes)-1), function(i) 
-#             matrix(rnorm(sizes[i]*sizes[i+1], 3), nrow = sizes[i], ncol = sizes[i+1]))
+set.seed(123)
+sizes <- c(n_in, n_h, n_out)
+Ws <- lapply(1:(length(sizes)-1), function(i) 
+             matrix(rnorm(sizes[i]*sizes[i+1], 3), nrow = sizes[i], ncol = sizes[i+1]))
 
 gon <- function(Ws, Fin) {
     ## Initialize Voltage Storage
@@ -125,43 +126,43 @@ gon <- function(Ws, Fin) {
 
 gon(Ws, Fin)[[1]]
 
-#td <- 4.20
-#iters <- 100
-#for (iter in 1:iters) {
-#    #Assumes at least 1 hidden layer
-#    ret <- gon(Ws)
-#    Fcal <- ret[[1]]
-#    ALPHA <- ret[[2]]
-#    ALPHAd <- ret[[3]]
-#
-#    ta <- Fcal[[length(n_h) + 2]][[1]][1]
-#    print(ta)
-#    tai <- which(abs(ts-ta) < t_eps/2)
-#    # Output delta
-#    d_out <- rep(NA, n_out)
-#    for (neur in 1:n_out) {
-#        #TODO: one neuron assumption: modify td & ta
-#        d_out[neur] <- -(ta - td) / t(Ws[[length(n_h)+1]]) %*% ALPHAd[[length(n_h)+1]][,tai]
-#    }
-#
-#    # Hidden Delta
-#    d_h <- lapply(n_h, function(h) rep(NA, h))
-#    for (l in length(n_h):1) {
-#        for (neur in 1:n_h[l]) {
-#            #TODO: d_out not good for more than 1 hidden layer
-#            d_h[[l]][neur] <-  d_out * (ALPHAd[[l+1]][neur,tai] * sum(Ws[[l+1]][neur,]))  /
-#                t(Ws[[l]][,neur]) %*% ALPHAd[[l]][,tai]
-#        }
-#    }
-#    delta <- d_h
-#    delta[[length(delta)+1]] <- d_out
-#
-#    # No need for input delta unless we have weights from the input function (may do this)
-#
-#    # Calculate weight updates, and apply them
-#    for (wi in 1:length(Ws)) {
-#        Wd <- -t(delta[[wi]]) %x% ALPHA[[wi]][,tai]
-#        #print(Wd)
-#        Ws[[wi]] <- Ws[[wi]] - learn_rate * Wd
-#    }
-#} 
+td <- 4.20
+iters <- 20
+for (iter in 1:iters) {
+    #Assumes at least 1 hidden layer
+    ret <- gon(Ws, Fin)
+    Fcal <- ret[[1]]
+    ALPHA <- ret[[2]]
+    ALPHAd <- ret[[3]]
+
+    ta <- Fcal[[length(n_h) + 2]][[1]][1]
+    print(ta)
+    tai <- which(abs(ts-ta) < t_eps/2)
+    # Output delta
+    d_out <- rep(NA, n_out)
+    for (neur in 1:n_out) {
+        #TODO: one neuron assumption: modify td & ta
+        d_out[neur] <- -(ta - td) / t(Ws[[length(n_h)+1]]) %*% ALPHAd[[length(n_h)+1]][,tai]
+    }
+
+    # Hidden Delta
+    d_h <- lapply(n_h, function(h) rep(NA, h))
+    for (l in length(n_h):1) {
+        for (neur in 1:n_h[l]) {
+            #TODO: d_out not good for more than 1 hidden layer
+            d_h[[l]][neur] <-  d_out * (ALPHAd[[l+1]][neur,tai] * sum(Ws[[l+1]][neur,]))  /
+                t(Ws[[l]][,neur]) %*% ALPHAd[[l]][,tai]
+        }
+    }
+    delta <- d_h
+    delta[[length(delta)+1]] <- d_out
+
+    # No need for input delta unless we have weights from the input function (may do this)
+
+    # Calculate weight updates, and apply them
+    for (wi in 1:length(Ws)) {
+        Wd <- -t(delta[[wi]]) %x% ALPHA[[wi]][,tai]
+        #print(Wd)
+        Ws[[wi]] <- Ws[[wi]] - learn_rate * Wd
+    }
+} 
