@@ -14,13 +14,13 @@ double V_THRESH = 1.5;
 
 
 double kern(double dt) {
-    if (dt < 0) {
+    if (dt <= 0) {
         return(0);
     }
     return(exp(-dt / TAU));
 }
 double kernd(double dt) {
-    if (dt < 0) {
+    if (dt <= 0) {
         return(0);
     }
     return(-1/TAU * exp(-dt / TAU));
@@ -106,7 +106,6 @@ std::vector<std::vector<std::vector<double> > > lif_forward(int n_in,
     // Do simulation
     double t = 0;
     for (int ti = 0; ti < t_steps; ti++) {
-        t += t_eps;
 
         // Calculate total postsynaptic contribution and its derivative.
         for (int l = 0; l < layers; l++) {
@@ -124,6 +123,12 @@ std::vector<std::vector<std::vector<double> > > lif_forward(int n_in,
             }
         }
 
+        // Print the current ALPHA
+        //std::cout << ti;
+        //for (int l = 0; l < layers; l++) {
+        //    std::cout << ALPHA[l].col(ti);
+        //}
+
         // Multiply by weights to get input currents
         std::vector<arma::vec> h_inputs(l_h);
         if (l_h > 0) {
@@ -140,7 +145,7 @@ std::vector<std::vector<std::vector<double> > > lif_forward(int n_in,
                 h_dvdt[l] = -LEAK * Vs[l].col(ti) + h_inputs[l];
             }
         }
-        arma::mat out_dvdt = -LEAK * Vs[l_h].col(ti) + out_input;
+        arma::vec out_dvdt = -LEAK * Vs[l_h].col(ti) + out_input;
 
         // Update the potentials
         if (l_h > 0) {
@@ -148,7 +153,7 @@ std::vector<std::vector<std::vector<double> > > lif_forward(int n_in,
                 Vs[l].col(ti+1) = Vs[l].col(ti) + t_eps * h_dvdt[l];
             }
         }
-        Vs[l_h].col(ti+1) = Vs[l_h].col(ti) + t_eps * out_dvdt[l_h];
+        Vs[l_h].col(ti+1) = Vs[l_h].col(ti) + t_eps * out_dvdt;
 
         // Check for firing neurons
         for (int l = 0; l < l_h+1; l++) {
@@ -179,6 +184,8 @@ std::vector<std::vector<std::vector<double> > > lif_forward(int n_in,
         //}
         //std::cout << Vs[l_h] << "\n";
         //std::cout << "\n";
+
+        t += t_eps;
     }
 
     return(Fcal);
