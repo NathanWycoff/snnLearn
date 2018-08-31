@@ -2,15 +2,30 @@
 % Please edit documentation in R/RcppExports.R
 \name{goc}
 \alias{goc}
-\title{Leading NA}
+\title{Solve the LIF forward problem}
 \usage{
-goc(n_in, l_h, n_h, n_out, Ws, Fin, flen, t_eps, t_steps)
+goc(n_in, l_h, n_h, n_out, Ws, Fin, t_eps, t_steps)
 }
 \arguments{
-\item{x}{An integer vector}
+\item{n_in}{The number of input neurons, a scalar integer.}
+
+\item{l_h}{The number of hidden layers, a scalar integer.}
+
+\item{n_h}{The number of hidden neurons in each layer (of length l_h).}
+
+\item{n_out}{The number of output neurons, a scalar integer, for now has to be 1.}
+
+\item{Ws}{A list of matrices giving the weights between layers, of length 1 fewer than the number of layers. The first matrix is of dimension n_in x n_h[1], etc.}
+
+\item{Fin}{A list of numeric vectors, giving the times of the input spikes.}
+
+\item{t_eps}{A scalar double, the step size for numerical integration.}
+
+\item{t_steps}{A scalar integer, the number of finite difference iterations.}
+}
+\value{
+A list of lists of numeric vectors. The first entry will be Fin, and so on.
 }
 \description{
-This function returns a logical vector identifying if
-there are leading NA, marking the leadings NA as TRUE and
-everything else as FALSE.
+Integrate a feedforward Linear Leaky Integrate and Fire Network via forward Euler.
 }

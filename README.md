@@ -1,103 +1,65 @@
-thanks PurpleBooth for the template...
 # snnLearn - Spiking Neural Network Simulation for Machine Learning
 
---
 Professor Warburton,
 
-This is what will someday be an R package.
+This is what will someday be an R package. I will be writing the computational pieces in Cpp.
 
 Instead of building my code manually, you will have R install them for you. For this to work, you will need to install R. 
 
-On Mac, you do "brew install r". Because my package is hosted on Github, installation is slightly complicated. You also need to download developer pacakges (except on Linux). 
+# Installation
 
-You will also need 
+On Mac, install R.
 
---
-
-One Paragraph of project description goes here
-
-## Getting Started
-
-These instructions will get you a copy of the project up and running on your local machine for development and testing purposes. See deployment for notes on how to deploy the project on a live system.
-
-### Prerequisites
-
-What things you need to install the software and how to install them
+Then, install the devtools package:
 
 ```
-Give examples
+bash > R
+<<welcome message>>
+R > install.packages('devtools')
 ```
 
-### Installing
-
-A step by step series of examples that tell you how to get a development env running
-
-Say what the step will be
+then use that to install my package:
 
 ```
-Give the example
+bash > git clone https://github.com/NathanWycoff/snnLearn.git
+bash > cd snnLearn
+bash > R
+<<welcome message>>
+R > devtools::install('.')
 ```
 
-And repeat
+Then, you can load the function using 'require(snnLearn)'.
+
+Do '?goc' after leading snnLearn for details.
+
+# Example
 
 ```
-until finished
+require(snnLearn)
+
+## A LIF with layer structure
+learn_rate <- 0.1
+
+t_eps <- 0.01
+t_end <- 10
+ts <- seq(0, t_end, by = t_eps)
+t_steps <- length(ts)
+
+n_in <- 2
+n_out <- 1
+n_h <- c(1)
+layers <- 2 + length(n_h)
+#Ws <- list(matrix(c(3.5), ncol = 1), matrix(c(3), ncol = 1))
+
+Fin <- list(seq(0,10, by = 1), seq(0,10, by = 1))
+
+# Generate random wieghts
+set.seed(123)
+sizes <- c(n_in, n_h, n_out)
+Ws <- lapply(1:(length(sizes)-1), function(i) 
+             matrix(rnorm(sizes[i]*sizes[i+1], 3), nrow = sizes[i], ncol = sizes[i+1]))
+
+# Simulate the Network, print out firing times of each layer
+l_h <- length(n_h)
+goc(n_in, l_h, n_h, n_out, Ws, Fin, t_eps, t_steps) 
 ```
-
-End with an example of getting some data out of the system or using it for a little demo
-
-## Running the tests
-
-Explain how to run the automated tests for this system
-
-### Break down into end to end tests
-
-Explain what these tests test and why
-
-```
-Give an example
-```
-
-### And coding style tests
-
-Explain what these tests test and why
-
-```
-Give an example
-```
-
-## Deployment
-
-Add additional notes about how to deploy this on a live system
-
-## Built With
-
-* [Dropwizard](http://www.dropwizard.io/1.0.2/docs/) - The web framework used
-* [Maven](https://maven.apache.org/) - Dependency Management
-* [ROME](https://rometools.github.io/rome/) - Used to generate RSS Feeds
-
-## Contributing
-
-Please read [CONTRIBUTING.md](https://gist.github.com/PurpleBooth/b24679402957c63ec426) for details on our code of conduct, and the process for submitting pull requests to us.
-
-## Versioning
-
-We use [SemVer](http://semver.org/) for versioning. For the versions available, see the [tags on this repository](https://github.com/your/project/tags). 
-
-## Authors
-
-* **Billie Thompson** - *Initial work* - [PurpleBooth](https://github.com/PurpleBooth)
-
-See also the list of [contributors](https://github.com/your/project/contributors) who participated in this project.
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details
-
-## Acknowledgments
-
-* Hat tip to anyone whose code was used
-* Inspiration
-* etc
-
-

@@ -191,13 +191,19 @@ std::vector<std::vector<std::vector<double> > > lif_forward(int n_in,
     return(Fcal);
 }
 
-//' Leading NA
+//' Solve the LIF forward problem
 //'
-//' This function returns a logical vector identifying if
-//' there are leading NA, marking the leadings NA as TRUE and
-//' everything else as FALSE.
+//' Integrate a feedforward Linear Leaky Integrate and Fire Network via forward Euler.
 //'
-//' @param x An integer vector
+//' @param n_in The number of input neurons, a scalar integer.
+//' @param l_h The number of hidden layers, a scalar integer.
+//' @param n_h The number of hidden neurons in each layer (of length l_h).
+//' @param n_out The number of output neurons, a scalar integer, for now has to be 1.
+//' @param Ws A list of matrices giving the weights between layers, of length 1 fewer than the number of layers. The first matrix is of dimension n_in x n_h[1], etc.
+//' @param Fin A list of numeric vectors, giving the times of the input spikes.
+//' @param t_eps A scalar double, the step size for numerical integration.
+//' @param t_steps A scalar integer, the number of finite difference iterations.
+//' @return A list of lists of numeric vectors. The first entry will be Fin, and so on.
 //' @export
 // [[Rcpp::export]]
 List goc(int n_in, int l_h, IntegerVector n_h, int n_out, List Ws, 
