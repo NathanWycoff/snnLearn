@@ -26,14 +26,12 @@ bash > R
 R > install.packages('devtools')
 ```
 
-then use that to install my package:
+then use that to install my package and its dependencies:
 
 ```
-bash > git clone https://github.com/NathanWycoff/snnLearn.git
-bash > cd snnLearn
 bash > R
 <<welcome message>>
-R > devtools::install('.')
+R > devtools::install_github('NathanWycoff/snnLearn')
 ```
 
 Then, you can load the function using 'require(snnLearn)'.
@@ -42,7 +40,9 @@ This package is harder to install than usual because it requires compilation and
 
 Do '?goc' after leading snnLearn for details.
 
-The "goc" function calls a Cpp "intermediary" function which then calls pure Cpp code. The code may be found in src/layer_lif.cpp. The Cpp code uses armadillo for matrix multiplication. The appropriate headers should be automatically installed during installation of my package.
+The "goc" function calls a Cpp "intermediary" function which then calls pure Cpp code. The code may be found in src/layer_lif.cpp. The Cpp code uses Armadillo for matrix multiplication. The appropriate headers should be automatically installed during installation of my package.
+
+Don't hesitate to email me if something here breaks down (I've tested that these instructions work on a Mac).
 
 # Example
 
