@@ -32,7 +32,11 @@ Then, you can load the function using 'require(snnLearn)'.
 
 Do '?goc' after leading snnLearn for details.
 
+The "goc" function calls a Cpp "intermediary" function which then calls pure Cpp code. The code may be found in src/layer_lif.cpp. The Cpp code uses armadillo for matrix multiplication. The appropriate headers should be automatically installed during installation of my package.
+
 # Example
+
+Try running this code in an R terminal.
 
 ```
 require(snnLearn)
