@@ -28,7 +28,7 @@ double kernd(double dt) {
 
 std::vector<std::vector<std::vector<double> > > lif_forward(int n_in, 
         int l_h, int* n_h, int n_out, std::vector<arma::mat> Ws, 
-        std::vector<std::vector<double> > Fin, int* flen,
+        std::vector<std::vector<double> > Fin, 
         double t_eps, int t_steps) {
     // n_h is of length l_h
     // Ws will be of length l_h + 2
@@ -191,10 +191,17 @@ std::vector<std::vector<std::vector<double> > > lif_forward(int n_in,
     return(Fcal);
 }
 
-// Turn the R objects into Cpp equivalents
+//' Leading NA
+//'
+//' This function returns a logical vector identifying if
+//' there are leading NA, marking the leadings NA as TRUE and
+//' everything else as FALSE.
+//'
+//' @param x An integer vector
+//' @export
 // [[Rcpp::export]]
 List goc(int n_in, int l_h, IntegerVector n_h, int n_out, List Ws, 
-        List Fin, IntegerVector flen, double t_eps, int t_steps) {
+        List Fin, double t_eps, int t_steps) {
 
     // Build Ws matrices, put them into a Cpp list of arma matrices
     std::vector<arma::mat> Wsc(l_h+1);
@@ -222,7 +229,7 @@ List goc(int n_in, int l_h, IntegerVector n_h, int n_out, List Ws,
     //}
     std::vector<std::vector<std::vector<double> > > Fcal;
     Fcal = lif_forward(n_in, l_h, n_h.begin(), n_out, 
-            Wsc, Finc, flen.begin(), t_eps, t_steps);
+            Wsc, Finc, t_eps, t_steps);
 
     List FcalR(l_h+2);
     for (int l = 0; l < l_h+2; l++) {
@@ -231,8 +238,3 @@ List goc(int n_in, int l_h, IntegerVector n_h, int n_out, List Ws,
 
     return(FcalR);
 }
-
-//double nlipC(arma::mat PHI, arma::mat THETA, arma::mat PSI, List docs, double eta, dou    ble gamma, double beta) {
-//
-//
-//}
