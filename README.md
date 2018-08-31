@@ -8,7 +8,15 @@ Instead of building my code manually, you will have R install them for you. For 
 
 # Installation
 
-On Mac, install R.
+First, if you're on Mac, make sure you have xcode developer tools installed. Run 
+
+```
+bash > xcode-select --install
+```
+
+if you don't.
+
+Next, install R (brew install r).
 
 Then, install the devtools package:
 
@@ -29,6 +37,8 @@ R > devtools::install('.')
 ```
 
 Then, you can load the function using 'require(snnLearn)'.
+
+This package is harder to install than usual because it requires compilation and is not yet hosted on CRAN (which keeps binaries available for Windows, OSX, and Ubuntu).
 
 Do '?goc' after leading snnLearn for details.
 
