@@ -6,12 +6,13 @@ require('Rmpi')
 mpi.spawn.Rslaves(nslaves = 4)
 
 # Rank 0 partitions the work and sends it out to everyone.
-n <- 10
-mpi.remote.exec({
+output <- mpi.remote.exec({
     source('dev/split_network.R')
     source('dev/mpi_integrate_lif.R')
 
     # Set up network params
+    #TODO: everybody exectutes this, and we probably don't want that
+    set.seed(123)
     t_eps <- 0.1
     t_end <- 3.5
     ts <- seq(0, t_end, by = t_eps)
@@ -33,6 +34,7 @@ mpi.remote.exec({
     # Integrate ODE system using Forward Euler
     t <- 0
     for (ti in 1:length(ts)) {
+
         # Do 1 time step
         ret <- mpifun_odestep(proc, t, leak, t_eps, v_thresh)
         proc <- ret$proc
@@ -40,10 +42,27 @@ mpi.remote.exec({
         t <- t + t_eps
 
         # Tell downstream neurons about firing events
-
+        #TODO: This can be done as a pure mpi call
+        for (psn in proc$postsyn) {
+            mpi.isend.Robj(post_Fcal, psn, tag = 42069)
+        }
 
         # Listen to upstream neurons about their firing events.
+        pre_Fcals <- list()
+        for (psn in proc$presyn) {
+            pre_Fcals[[length(pre_Fcals)+1]] <- mpi.recv.Robj(psn, tag = 42069)
+        }
 
+        # Store this info in Fcal
+        for (report in pre_Fcals) {
+            if (length(report) > 0) {
+                for (i in 1:(length(report)/2)) {
+                    layer <- which(proc$presyn==report[2*(i-1) + 1])
+                    neuron <- report[2*(i-1) + 2]
+                    proc$Fcal[[layer]][[neuron]] <- c(proc$Fcal[[layer]][[neuron]], t + t_eps)
+                }
+            } 
+        }
     }
     proc
 })

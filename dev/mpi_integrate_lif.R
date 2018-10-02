@@ -5,6 +5,7 @@ kernd <- function(dt) as.numeric(dt>0) * -1/tau * exp(-dt/tau)
 tau <- 1
 
 # Create storage for the ODE integration
+# Post_Fcal is a numeric vector. Each two elements represents a firing event, first gives the layer, second the neuron
 mpifun_setup_int <- function(proc, sizes, t_steps) {
     # Unpack sizes
     n_in <- sizes[1]
@@ -52,12 +53,12 @@ mpifun_odestep <- function(proc, t, leak, t_eps, v_thresh) {
     }
 
     # See if anyone fired and if so record it.
-    post_Fcal <- lapply(1:L, function(l) lapply(1:length(proc$neurons[[l]]), function(n) list()))
+    post_Fcal <- c()
     for (l in 1:L) {
         for (n in 1:nrow(proc$Vs[[l]])) {
             if (proc$Vs[[l]][n,ti+1] > v_thresh) {
                 proc$Vs[[l]][n,ti+1] <- 0
-                post_Fcal[[l]][[n]] <- c(post_Fcal[[l]][[n]], t + t_eps)
+                post_Fcal <- c(post_Fcal, c(proc$layers[l], proc$neurons[[l]][n]))
             }
         }
     }

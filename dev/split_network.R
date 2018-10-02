@@ -52,8 +52,16 @@ split_snn <- function(Ws, Fin, sizes, n_proc) {
 
     # Give each processor the weights it needs from presynaptic layers
     for (proc in 1:n_proc) {
-        procs[[proc]]$postsyn <- Filter(function(x) x < length(sizes), 
+        postlayers <- Filter(function(x) x < length(sizes), 
                                         procs[[proc]]$layers + 1)
+        postprocs <- unique(as.numeric(sapply(postlayers, function(l) pil[[l]])))
+        procs[[proc]]$postsyn <- postprocs
+
+        prelayers <- Filter(function(x) x > 0, 
+                                        procs[[proc]]$layers - 1)
+        preprocs <- unique(as.numeric(sapply(prelayers, function(l) pil[[l]])))
+        procs[[proc]]$presyn <- preprocs
+
         procs[[proc]]$Ws <- lapply(1:length(procs[[proc]]$layers), 
                                    function(li) Ws[[procs[[proc]]$layers]][,procs[[proc]]$neurons[[li]]])
     }
@@ -63,7 +71,7 @@ split_snn <- function(Ws, Fin, sizes, n_proc) {
         presyn <- procs[[proc]]$layers - 1
         procs[[proc]]$Fcal <- lapply(presyn, function(l) {
                                          if (l > 0) {
-                                             lapply(1:sizes[l+1], function(i) list())
+                                             lapply(1:sizes[l+1], function(i) c())
                                          } else {
                                              Fin
                                          }
@@ -81,7 +89,7 @@ mpifun_split_snn <- function(Ws, Fin, sizes) {
 
         if (mpi.comm.size() > 2) {
             for (r in 2:(mpi.comm.size()-1)) {
-                mpi.send.Robj(procs[[r-1]], r, 42069)
+                mpi.send.Robj(procs[[r]], r, 42069)
             }
         }
         proc <- procs[[1]]
