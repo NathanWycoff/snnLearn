@@ -227,7 +227,7 @@ std::vector<std::vector<std::vector<double> > > lif_forward(int n_in,
 //'
 //' @export
 // [[Rcpp::export]]
-List goc(int n_in, int l_h, IntegerVector n_h, int n_out, List Ws, 
+List lif_forward_Cpp(int n_in, int l_h, IntegerVector n_h, int n_out, List Ws, 
         List Fin, double t_eps, int t_steps) {
 
     // Build Ws matrices, put them into a Cpp list of arma matrices

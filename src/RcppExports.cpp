@@ -6,9 +6,9 @@
 
 using namespace Rcpp;
 
-// goc
-List goc(int n_in, int l_h, IntegerVector n_h, int n_out, List Ws, List Fin, double t_eps, int t_steps);
-RcppExport SEXP _snnLearn_goc(SEXP n_inSEXP, SEXP l_hSEXP, SEXP n_hSEXP, SEXP n_outSEXP, SEXP WsSEXP, SEXP FinSEXP, SEXP t_epsSEXP, SEXP t_stepsSEXP) {
+// lif_forward_Cpp
+List lif_forward_Cpp(int n_in, int l_h, IntegerVector n_h, int n_out, List Ws, List Fin, double t_eps, int t_steps);
+RcppExport SEXP _snnLearn_lif_forward_Cpp(SEXP n_inSEXP, SEXP l_hSEXP, SEXP n_hSEXP, SEXP n_outSEXP, SEXP WsSEXP, SEXP FinSEXP, SEXP t_epsSEXP, SEXP t_stepsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -20,13 +20,13 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< List >::type Fin(FinSEXP);
     Rcpp::traits::input_parameter< double >::type t_eps(t_epsSEXP);
     Rcpp::traits::input_parameter< int >::type t_steps(t_stepsSEXP);
-    rcpp_result_gen = Rcpp::wrap(goc(n_in, l_h, n_h, n_out, Ws, Fin, t_eps, t_steps));
+    rcpp_result_gen = Rcpp::wrap(lif_forward_Cpp(n_in, l_h, n_h, n_out, Ws, Fin, t_eps, t_steps));
     return rcpp_result_gen;
 END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_snnLearn_goc", (DL_FUNC) &_snnLearn_goc, 8},
+    {"_snnLearn_lif_forward_Cpp", (DL_FUNC) &_snnLearn_lif_forward_Cpp, 8},
     {NULL, NULL, 0}
 };
 

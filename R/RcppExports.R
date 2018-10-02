@@ -36,7 +36,7 @@
 #' print(a)
 #'
 #' @export
-goc <- function(n_in, l_h, n_h, n_out, Ws, Fin, t_eps, t_steps) {
-    .Call(`_snnLearn_goc`, n_in, l_h, n_h, n_out, Ws, Fin, t_eps, t_steps)
+lif_forward_Cpp <- function(n_in, l_h, n_h, n_out, Ws, Fin, t_eps, t_steps) {
+    .Call(`_snnLearn_lif_forward_Cpp`, n_in, l_h, n_h, n_out, Ws, Fin, t_eps, t_steps)
 }
 
