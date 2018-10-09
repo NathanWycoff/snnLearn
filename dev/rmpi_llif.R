@@ -12,26 +12,45 @@ output <- mpi.remote.exec({
 
     # Set up network params
     #TODO: everybody exectutes this, and we probably don't want that
-    set.seed(123)
-    t_eps <- 0.1
-    t_end <- 3.5
+    #set.seed(123)
+    t_eps <- 0.01
+    t_end <- 10
     ts <- seq(0, t_end, by = t_eps)
+    #t_steps <- length(ts)
+    #n_in <- 2
+    #n_out <- 1
+    #n_h <- c(1)
+    #layers <- 2 + length(n_h)
+    ##Ws <- list(matrix(c(3.5), ncol = 1), matrix(c(3), ncol = 1))
+    #Fin <- list(seq(0,10, by = 1), seq(0,10, by = 1))
+    ## Generate random wieghts
+    #set.seed(123)
+    #sizes <- c(n_in, n_h, n_out)
+    #Ws <- lapply(1:(length(sizes)-1), function(i) 
+    #             matrix(rnorm(sizes[i]*sizes[i+1], 3), nrow = sizes[i], ncol = sizes[i+1]))
+    #l_h <- length(n_h)
+
+    #t_eps <- 0.1
+    #t_end <- 3.5
+    #ts <- seq(0, t_end, by = t_eps)
     t_steps <- length(ts)
-    n_in <- 3
-    n_out <- 2
+    n_in <- 2
+    n_out <- 1
     n_h <- c(2, 3)
-    v_thresh <- 1.5
-    leak <- 0.5
     sizes <- c(n_in, n_h, n_out)
+    set.seed(123)
     Ws <- lapply(1:(length(sizes)-1), function(i)
                 matrix(rnorm(sizes[i]*sizes[i+1], 3), nrow = sizes[i], ncol = sizes[i+1]))
     Fin <- lapply(1:n_in, function(i) seq(0,10, by = 1))
+
+    v_thresh <- 1.5
+    leak <- 0.5
 
     proc <- mpifun_split_snn(Ws, Fin, sizes)
 
     proc <- mpifun_setup_int(proc, sizes, t_steps)
 
-    # Integrate ODE system using Forward Euler
+    ## Integrate ODE system using Forward Euler
     t <- 0
     for (ti in 1:length(ts)) {
 
@@ -59,12 +78,14 @@ output <- mpi.remote.exec({
                 for (i in 1:(length(report)/2)) {
                     layer <- which(proc$presyn==report[2*(i-1) + 1])
                     neuron <- report[2*(i-1) + 2]
-                    proc$Fcal[[layer]][[neuron]] <- c(proc$Fcal[[layer]][[neuron]], t + t_eps)
+                    proc$Fcal[[layer]][[neuron]] <- c(proc$Fcal[[layer]][[neuron]], t)
                 }
             } 
         }
     }
     proc
 })
+
+lapply(output, function(proc) proc$Fcal)
 
 mpi.quit()

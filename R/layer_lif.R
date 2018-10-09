@@ -46,8 +46,6 @@ lif_forward_R <- function(n_in, l_h, n_h, n_out, Ws, Fin, t_eps, t_steps) {
     kern <- function(dt) as.numeric(dt>0) * exp(-dt/tau)
     kernd <- function(dt) as.numeric(dt>0) * -1/tau * exp(-dt/tau)
 
-
-
     ## Initialize Voltage Storage
     Vs <- list()
     if (length(n_h) > 0) {
