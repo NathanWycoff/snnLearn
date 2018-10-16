@@ -1,6 +1,8 @@
 #!/usr/bin/Rscript
 #  dev/arb_lif.R Author "Nathan Wycoff <nathanbrwycoff@gmail.com>" Date 10.15.2018
 
+# Set up network params
+set.seed(123)
 learn_rate <- 0.1
 I_0 <- 1 #Stimulation
 leak <- 0.5
@@ -17,7 +19,7 @@ t_steps <- length(ts)
 v_thresh <- 1.5
 v_reset <- 0
 
-N <- 2#Number of simulated neurons
+N <- 10#Number of simulated neurons
 M <- 3#Number of "input" neurons (firing times known)
 OMEGA <- matrix(rnorm((N)^2), nrow = N)
 LAMBDA <- matrix(rgamma(N*M,1,1), nrow = M)
@@ -25,13 +27,16 @@ LAMBDA <- matrix(rgamma(N*M,1,1), nrow = M)
 nf <- 2# Number of times each input neuron fires during sim
 Fin <- lapply(1:M, function(i) runif(nf, 0, t_end))
 
+v_thresh <- 1.5
+leak <- 0.5
+
 arb_forward_R <- function(N, M, OMEGA, LAMBDA, Fin, t_eps, t_steps) {
     # Initialize potential, postsynaptic potential, and firing times storage.
     V <- matrix(NA, nrow = N, ncol = t_steps+1)
     V[,1] <- 0
     ALPHA <- matrix(NA, nrow = N, ncol = t_steps)
     BETA <- matrix(NA, nrow = M, ncol = t_steps)
-    Fcal <- lapply(1:N, function(n) list())
+    Fcal <- lapply(1:N, function(n) c())
 
     t <- 0
     for (ti in 1:length(ts)) {
@@ -48,6 +53,7 @@ arb_forward_R <- function(N, M, OMEGA, LAMBDA, Fin, t_eps, t_steps) {
         for (n in 1:N) {
             if (V[n,ti+1] > v_thresh) {
                 Fcal[[n]] <- c(Fcal[[n]], t + t_eps)
+                V[n,ti+1] <- 0
             }
         }
 
@@ -55,7 +61,8 @@ arb_forward_R <- function(N, M, OMEGA, LAMBDA, Fin, t_eps, t_steps) {
         
     }
 
-    return(list(Fcal, ALPHA, BETA))
+    return(list(Fcal, ALPHA, BETA, V))
 }
 
 b <- arb_forward_R(N, M, OMEGA, LAMBDA, Fin, t_eps, t_steps)
+b[[1]]
