@@ -1,6 +1,5 @@
 /** dev/srm.cpp Author "Nathan Wycoff <nathanbrwycoff@gmail.com>" Date 10.19.2018  */
 
-
 // Solve an SRM0 model
 #include <iostream>
 #include <fstream>
@@ -33,6 +32,250 @@ double iprekern(double dt) {
     }
     return(-V_THRESH);
 }
+
+// The inner product function, uses the standard R^n inner product.
+double inner_prod(double *x, double *y, int n) {
+    double sum = 0;
+    for (int i = 0; i < n; i++) {
+        sum += x[i] * y[i];
+    }
+    return(sum);
+}
+
+// Row-major Matrix-vector multiplication
+// A points to m many length n double pointers.
+// x is, of course, of length n.
+// We return a vector of length m.
+double* rm_mv_mult(double ** A, int m, int n, double *x) {
+    double *b = (double *)calloc(m, sizeof(double));
+    for (int i = 0; i < m; i++) {
+        b[i] = inner_prod(A[i], x, n);
+    }
+    return(b);
+}
+
+// The main simulation, using armadillo for matrix multiplication.
+vector<vector<vector<double> > > sim_body_arma(vector<int> net_shape, 
+        vector<vector<double> > Fin, vector<mat> Ws) {
+    // Do simulation
+    int t_steps = 35;
+
+    vector<mat> Vs;
+    for (int i = 0; i < net_shape.size()-1; i++) {
+        Vs.push_back(mat(net_shape[i+1], t_steps + 1, fill::zeros));
+    }
+
+    vector<mat> ALPHA;
+    vector<mat> OMEGA;
+    for (int i = 0; i < net_shape.size(); i++) {
+        ALPHA.push_back(mat(net_shape[i], t_steps, fill::zeros));
+        OMEGA.push_back(mat(net_shape[i], t_steps, fill::zeros));
+    }
+
+    // Storage for firing times
+    vector<vector<vector<double> > > Fcal(net_shape.size());
+    Fcal[0] = Fin;
+    for (int l = 0; l < net_shape.size()-1; l++) {
+        vector<vector<double> > Fi(net_shape[l+1]);
+        for (int n = 0; n < net_shape[l+1]; n++) {
+            Fi[n] = vector<double>();
+        }
+        Fcal[l+1] = Fi;
+    }
+
+    double t = 0;
+    for (int ti = 0; ti < t_steps; ti++) {
+
+        // Calculate total postsynaptic and refractory contribution 
+        for (int l = 0; l < net_shape.size(); l++) {
+            for (int n = 0; n < net_shape[l]; n++) {
+                int n_f = Fcal[l][n].size();
+                double psc = 0;
+                double ref = 0;
+                for (int tfi = 0; tfi < n_f; tfi++) {
+                    double tf = Fcal[l][n][tfi];
+                    psc += ipostkern(t - tf);
+                    ref += iprekern(t - tf);
+                }
+                ALPHA[l](n, ti) = psc;
+                OMEGA[l](n, ti) = ref;
+            }
+        }
+
+        // Update potential
+        for (int l = 0; l < net_shape.size()-1; l++) {
+            Vs[l].col(ti+1) = Ws[l].t() * ALPHA[l].col(ti) + OMEGA[l+1].col(ti);
+        }
+
+        // Check for firing neurons
+        for (int l = 0; l < net_shape.size()-1; l++) {
+            for (int n = 0; n < net_shape[l+1]; n++) {
+                if (Vs[l](n, ti+1) > V_THRESH) {
+                    Fcal[l+1][n].push_back(t + t_eps);
+                }
+            }
+        }
+
+        t += t_eps;
+    }
+
+    return(Fcal);
+}
+
+// The main simulation, using armadillo for matrix multiplication, and organized in such a way that we solve a sequence embarassingly parallelizable problems.
+vector<vector<vector<double> > > par_sim_body_arma(vector<int> net_shape, 
+        vector<vector<double> > Fin, vector<mat> Ws) {
+    // Do simulation
+    int t_steps = 35;
+
+    vector<mat> Vs;
+    for (int i = 0; i < net_shape.size()-1; i++) {
+        Vs.push_back(mat(net_shape[i+1], t_steps + 1, fill::zeros));
+    }
+
+    vector<mat> ALPHA;
+    vector<mat> OMEGA;
+    for (int i = 0; i < net_shape.size(); i++) {
+        ALPHA.push_back(mat(net_shape[i], t_steps, fill::zeros));
+        if (i > 0) {
+            OMEGA.push_back(mat(net_shape[i], t_steps, fill::zeros));
+        }
+    }
+
+    // Storage for firing times
+    vector<vector<vector<double> > > Fcal(net_shape.size());
+    Fcal[0] = Fin;
+    for (int l = 0; l < net_shape.size()-1; l++) {
+        vector<vector<double> > Fi(net_shape[l+1]);
+        for (int n = 0; n < net_shape[l+1]; n++) {
+            Fi[n] = vector<double>();
+        }
+        Fcal[l+1] = Fi;
+    }
+
+    double t;
+    for (int l = 0; l < net_shape.size(); l++) {
+        for (int n = 0; n < net_shape[l]; n++) {
+            t = 0;
+            for (int ti = 0; ti < t_steps; ti++) {
+                // Calculate total postsynaptic contribution 
+                int n_f = Fcal[l][n].size();
+                double psc = 0;
+                for (int tfi = 0; tfi < n_f; tfi++) {
+                    double tf = Fcal[l][n][tfi];
+                    psc += ipostkern(t - tf);
+                }
+                ALPHA[l](n, ti) = psc;
+
+                if (l > 0) {
+                    // Update refractory contribution
+                    int n_f = Fcal[l][n].size();
+                    double ref = 0;
+                    for (int tfi = 0; tfi < n_f; tfi++) {
+                        double tf = Fcal[l][n][tfi];
+                        ref += iprekern(t - tf);
+                    }
+                    OMEGA[l-1](n, ti) = ref;
+                    
+                    // Update potential
+                    Vs[l-1](n, ti+1) = inner_prod(Ws[l-1].colptr(n), ALPHA[l-1].colptr(ti), net_shape[l-1]) + OMEGA[l-1](n, ti);
+
+                    // Check for firing neurons
+                    if (Vs[l-1](n, ti+1) > V_THRESH) {
+                        Fcal[l][n].push_back(t + t_eps);
+                    }
+                }
+                t += t_eps;
+            }
+        }
+    }
+
+    return(Fcal);
+}
+
+// The main simulation, using armadillo for matrix multiplication, and organized in such a way that we solve a sequence embarassingly parallelizable problems.
+//double ***par_sim_body_c(vector<int> net_shape, 
+//        double **Fin, vector<mat> Ws) {
+//    // Do simulation
+//    int n_layers = net_shape.size();
+//    int t_steps = 35;
+//
+//    // Stores electric potential for each layer in row major order.
+//    double ***Vs = (double ***)calloc(n_layers-1, sizeof(double**));
+//    for (int i = 0; i < net_shape.size()-1; i++) {
+//        Vs[i] = (double **)calloc(net_shape[i+1], sizeof(double*));
+//        for (int j = 0; j < net_shape[i+1]; j++) {
+//            Vs[i][j] = (double *)calloc(t_steps + 1, sizeof(double));
+//        }
+//    }
+//
+//    // ALPHA stores integrated postsynaptic potential in column major order.
+//    // OMEGA stores integrated refractory contribution in row major order.
+//    double ***ALPHA = (double ***)calloc(n_layers, sizeof(double**));
+//    double ***OMEGA = (double ***)calloc(n_layers-1, sizeof(double**));
+//    for (int i = 0; i < net_shape.size(); i++) {
+//        ALPHA[i] = (double **) calloc(t_steps, sizeof(double*));
+//        for (int j = 0; j < t_steps; j++) {
+//            ALPHA[i][j] = (double *) calloc(net_shape[i], sizeof(double));
+//        }
+//        if (i > 0) {
+//            OMEGA[i-1] = (double **) calloc(net_shape[i], sizeof(double*));
+//            for (int j = 0; j < net_shape[i]; j++) {
+//                OMEGA[i-1][j] = (double *) calloc(t_steps, sizeof(double));
+//            }
+//        }
+//    }
+//
+//    // Storage for firing times
+//    double ***Fcal = (double ***)calloc(net_shape.size(), sizeof(double**));
+//    Fcal[0] = Fin;
+//    for (int l = 0; l < net_shape.size()-1; l++) {
+//        double **Fi = (double **) calloc(net_shape[l+1], sizeof(double *));
+//        for (int n = 0; n < net_shape[l+1]; n++) {
+//            Fi[n] = vector<double>();
+//        }
+//        Fcal[l+1] = Fi;
+//    }
+//
+//    double t;
+//    for (int l = 0; l < net_shape.size(); l++) {
+//        for (int n = 0; n < net_shape[l]; n++) {
+//            t = 0;
+//            for (int ti = 0; ti < t_steps; ti++) {
+//                // Calculate total postsynaptic contribution 
+//                int n_f = Fcal[l][n].size();
+//                double psc = 0;
+//                for (int tfi = 0; tfi < n_f; tfi++) {
+//                    double tf = Fcal[l][n][tfi];
+//                    psc += ipostkern(t - tf);
+//                }
+//                ALPHA[l][ti][n] = psc;
+//
+//                if (l > 0) {
+//                    // Update refractory contribution
+//                    int n_f = Fcal[l][n].size();
+//                    double ref = 0;
+//                    for (int tfi = 0; tfi < n_f; tfi++) {
+//                        double tf = Fcal[l][n][tfi];
+//                        ref += iprekern(t - tf);
+//                    }
+//                    OMEGA[l-1][n][ti] = ref;
+//
+//                    // Update potential
+//                    Vs[l-1][n][ti+1] = inner_prod(Ws[l-1].colptr(n), ALPHA[l-1][ti], net_shape[l-1]) + OMEGA[l-1][n][ti];
+//
+//                    // Check for firing neurons
+//                    if (Vs[l-1][n][ti+1] > V_THRESH) {
+//                        Fcal[l][n].push_back(t + t_eps);
+//                    }
+//                }
+//                t += t_eps;
+//            }
+//        }
+//    }
+//
+//    return(Fcal);
+//}
 
 int main () {
     // Read in weight matrix and store as array.
@@ -76,79 +319,43 @@ int main () {
         Fin.push_back(Fline);
     }
 
-    // Do SRM0 simulation
-    int t_steps = 35;
-    int n_h = net_shape.size()-2;
-
-    vector<mat> Vs;
-    for (int i = 0; i < net_shape.size()-1; i++) {
-        Vs.push_back(mat(net_shape[i+1], t_steps + 1, fill::zeros));
+    // Calculate an upper bound on how many times each neuron will fire.
+    //int ** f_max = (int **)calloc(net_shape.size(), sizeof(int*));
+    vector<ivec> f_max(net_shape.size());
+    f_max[0] = ivec(net_shape[0]);
+    for (int n = 0; n < net_shape[0]; n++) {
+        f_max[0][n] = Fin[n].size();
     }
-
-    vector<mat> ALPHA;
-    vector<mat> OMEGA;
-    for (int i = 0; i < net_shape.size(); i++) {
-        ALPHA.push_back(mat(net_shape[i], t_steps, fill::zeros));
-        OMEGA.push_back(mat(net_shape[i], t_steps, fill::zeros));
-    }
-
-    // Storage for firing times
-    vector<vector<vector<double> > > Fcal(net_shape.size());
-    Fcal[0] = Fin;
     for (int l = 0; l < net_shape.size()-1; l++) {
-        std::vector<std::vector<double> > Fi(net_shape[l+1]);
-        for (int n = 0; n < net_shape[l+1]; n++) {
-            Fi[n] = std::vector<double>();
-        }
-        Fcal[l+1] = Fi;
+        f_max[l+1] = conv_to<ivec>::from(TAU / V_THRESH * Ws[l].t() * f_max[l]);
     }
 
-    // Do simulation
-    double t = 0;
-    for (int ti = 0; ti < t_steps; ti++) {
-
-        // Calculate total postsynaptic and refractory contribution 
-        for (int l = 0; l < net_shape.size(); l++) {
-            for (int n = 0; n < net_shape[l]; n++) {
-                int n_f = Fcal[l][n].size();
-                double psc = 0;
-                double ref = 0;
-                for (int tfi = 0; tfi < n_f; tfi++) {
-                    double tf = Fcal[l][n][tfi];
-                    psc += ipostkern(t - tf);
-                    ref += iprekern(t - tf);
-                }
-                ALPHA[l](n, ti) = psc;
-                OMEGA[l](n, ti) = ref;
-            }
-        }
-
-        // Update potential
-        for (int l = 0; l < net_shape.size()-1; l++) {
-            Vs[l].col(ti+1) = Ws[l].t() * ALPHA[l].col(ti) + OMEGA[l+1].col(ti);
-        }
-
-        // Check for firing neurons
-        for (int l = 0; l < net_shape.size()-1; l++) {
-            for (int n = 0; n < net_shape[l+1]; n++) {
-                if (Vs[l](n, ti+1) > V_THRESH) {
-                    Fcal[l+1][n].push_back(t + t_eps);
-                }
-            }
-        }
-
-        t += t_eps;
+    // Convert to a C array for use with GPU
+    long long int **c_f_max = 
+        (long long int **)calloc(net_shape.size(), sizeof(long long int*));
+    for (int l = 0; l < net_shape.size(); l++) {
+        c_f_max[l] = f_max[l].memptr();
     }
+
+    // Do SRM0 simulation
+    //vector<vector<vector<double> > > Fcal;
+    ////Fcal = par_sim_body_arma(net_shape, Fin, Ws);
+    //Fcal = par_sim_body_c(net_shape, Fin, Ws);
 
     // Print out the results
-    for (int l = 0; l < Fcal.size(); l++) {
-        cout << "Layer:" << l << endl;
-        for (int n = 0; n < Fcal[l].size(); n++) {
-            for (int f = 0; f < Fcal[l][n].size(); f++) {
-                cout << "Value:" << endl;
-                cout << Fcal[l][n][f] << endl;
-            }
-        }
+    //for (int l = 0; l < Fcal.size(); l++) {
+    //    cout << "Layer:" << l << endl;
+    //    for (int n = 0; n < Fcal[l].size(); n++) {
+    //        for (int f = 0; f < Fcal[l][n].size(); f++) {
+    //            cout << "Value:" << endl;
+    //            cout << Fcal[l][n][f] << endl;
+    //        }
+    //    }
+    //}
+    //
+
+    for (int l = 0; l < net_shape.size(); l++) {
+        cout << f_max[l] << endl;
     }
 
     return 0;
