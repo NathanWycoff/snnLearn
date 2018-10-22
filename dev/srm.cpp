@@ -194,88 +194,94 @@ vector<vector<vector<double> > > par_sim_body_arma(vector<int> net_shape,
 }
 
 // The main simulation, using armadillo for matrix multiplication, and organized in such a way that we solve a sequence embarassingly parallelizable problems.
-//double ***par_sim_body_c(vector<int> net_shape, 
-//        double **Fin, vector<mat> Ws) {
-//    // Do simulation
-//    int n_layers = net_shape.size();
-//    int t_steps = 35;
-//
-//    // Stores electric potential for each layer in row major order.
-//    double ***Vs = (double ***)calloc(n_layers-1, sizeof(double**));
-//    for (int i = 0; i < net_shape.size()-1; i++) {
-//        Vs[i] = (double **)calloc(net_shape[i+1], sizeof(double*));
-//        for (int j = 0; j < net_shape[i+1]; j++) {
-//            Vs[i][j] = (double *)calloc(t_steps + 1, sizeof(double));
-//        }
-//    }
-//
-//    // ALPHA stores integrated postsynaptic potential in column major order.
-//    // OMEGA stores integrated refractory contribution in row major order.
-//    double ***ALPHA = (double ***)calloc(n_layers, sizeof(double**));
-//    double ***OMEGA = (double ***)calloc(n_layers-1, sizeof(double**));
-//    for (int i = 0; i < net_shape.size(); i++) {
-//        ALPHA[i] = (double **) calloc(t_steps, sizeof(double*));
-//        for (int j = 0; j < t_steps; j++) {
-//            ALPHA[i][j] = (double *) calloc(net_shape[i], sizeof(double));
-//        }
-//        if (i > 0) {
-//            OMEGA[i-1] = (double **) calloc(net_shape[i], sizeof(double*));
-//            for (int j = 0; j < net_shape[i]; j++) {
-//                OMEGA[i-1][j] = (double *) calloc(t_steps, sizeof(double));
-//            }
-//        }
-//    }
-//
-//    // Storage for firing times
-//    double ***Fcal = (double ***)calloc(net_shape.size(), sizeof(double**));
-//    Fcal[0] = Fin;
-//    for (int l = 0; l < net_shape.size()-1; l++) {
-//        double **Fi = (double **) calloc(net_shape[l+1], sizeof(double *));
-//        for (int n = 0; n < net_shape[l+1]; n++) {
-//            Fi[n] = vector<double>();
-//        }
-//        Fcal[l+1] = Fi;
-//    }
-//
-//    double t;
-//    for (int l = 0; l < net_shape.size(); l++) {
-//        for (int n = 0; n < net_shape[l]; n++) {
-//            t = 0;
-//            for (int ti = 0; ti < t_steps; ti++) {
-//                // Calculate total postsynaptic contribution 
-//                int n_f = Fcal[l][n].size();
-//                double psc = 0;
-//                for (int tfi = 0; tfi < n_f; tfi++) {
-//                    double tf = Fcal[l][n][tfi];
-//                    psc += ipostkern(t - tf);
-//                }
-//                ALPHA[l][ti][n] = psc;
-//
-//                if (l > 0) {
-//                    // Update refractory contribution
-//                    int n_f = Fcal[l][n].size();
-//                    double ref = 0;
-//                    for (int tfi = 0; tfi < n_f; tfi++) {
-//                        double tf = Fcal[l][n][tfi];
-//                        ref += iprekern(t - tf);
-//                    }
-//                    OMEGA[l-1][n][ti] = ref;
-//
-//                    // Update potential
-//                    Vs[l-1][n][ti+1] = inner_prod(Ws[l-1].colptr(n), ALPHA[l-1][ti], net_shape[l-1]) + OMEGA[l-1][n][ti];
-//
-//                    // Check for firing neurons
-//                    if (Vs[l-1][n][ti+1] > V_THRESH) {
-//                        Fcal[l][n].push_back(t + t_eps);
-//                    }
-//                }
-//                t += t_eps;
-//            }
-//        }
-//    }
-//
-//    return(Fcal);
-//}
+double ***par_sim_body_c(int *net_shape, int n_layers,
+        double **Fin, int *f_count_in, long long int **f_max, vector<mat> Ws,
+        int** f_count) {
+    // Do simulation
+    int t_steps = 35;
+
+    // Stores electric potential for each layer in row major order.
+    double ***Vs = (double ***)calloc(n_layers-1, sizeof(double**));
+    for (int i = 0; i < n_layers-1; i++) {
+        Vs[i] = (double **)calloc(net_shape[i+1], sizeof(double*));
+        for (int j = 0; j < net_shape[i+1]; j++) {
+            Vs[i][j] = (double *)calloc(t_steps + 1, sizeof(double));
+        }
+    }
+
+    // ALPHA stores integrated postsynaptic potential in column major order.
+    // OMEGA stores integrated refractory contribution in row major order.
+    double ***ALPHA = (double ***)calloc(n_layers, sizeof(double**));
+    double ***OMEGA = (double ***)calloc(n_layers-1, sizeof(double**));
+    for (int i = 0; i < n_layers; i++) {
+        ALPHA[i] = (double **) calloc(t_steps, sizeof(double*));
+        for (int j = 0; j < t_steps; j++) {
+            ALPHA[i][j] = (double *) calloc(net_shape[i], sizeof(double));
+        }
+        if (i > 0) {
+            OMEGA[i-1] = (double **) calloc(net_shape[i], sizeof(double*));
+            for (int j = 0; j < net_shape[i]; j++) {
+                OMEGA[i-1][j] = (double *) calloc(t_steps, sizeof(double));
+            }
+        }
+    }
+
+    // Storage for firing times
+    double ***Fcal = (double ***)calloc(n_layers, sizeof(double**));
+    f_count[0] = f_count_in;
+    Fcal[0] = Fin;
+    for (int l = 0; l < n_layers-1; l++) {
+        double **Fi = (double **) calloc(net_shape[l+1], sizeof(double *));
+        f_count[l+1] = (int *)calloc(net_shape[l+1], sizeof(int));
+        for (int n = 0; n < net_shape[l+1]; n++) {
+            Fi[n] = (double *) calloc(f_max[l+1][n], sizeof(double));
+        }
+        Fcal[l+1] = Fi;
+    }
+
+    double t;
+    for (int l = 0; l < n_layers; l++) {
+        for (int n = 0; n < net_shape[l]; n++) {
+            t = 0;
+            for (int ti = 0; ti < t_steps; ti++) {
+                // Calculate total postsynaptic contribution 
+                int n_f = f_count[l][n];
+                double psc = 0;
+                for (int tfi = 0; tfi < n_f; tfi++) {
+                    double tf = Fcal[l][n][tfi];
+                    psc += ipostkern(t - tf);
+                }
+                ALPHA[l][ti][n] = psc;
+
+                if (l > 0) {
+                    // Update refractory contribution
+                    n_f = f_count[l][n];
+                    double ref = 0;
+                    for (int tfi = 0; tfi < n_f; tfi++) {
+                        double tf = Fcal[l][n][tfi];
+                        ref += iprekern(t - tf);
+                    }
+                    OMEGA[l-1][n][ti] = ref;
+
+                    // Update potential
+                    Vs[l-1][n][ti+1] = inner_prod(Ws[l-1].colptr(n), ALPHA[l-1][ti], net_shape[l-1]) + OMEGA[l-1][n][ti];
+
+                    // Check for firing neurons
+                    if (Vs[l-1][n][ti+1] > V_THRESH) {
+                        cout << f_count[l][n] << endl;
+                        Fcal[l][n][f_count[l][n]] = t + t_eps;
+                        f_count[l][n]++;
+                    }
+                }
+                t += t_eps;
+            }
+        }
+    }
+
+    //TODO: All memory is leaked rn.
+
+    return(Fcal);
+}
 
 int main () {
     // Read in weight matrix and store as array.
@@ -331,28 +337,40 @@ int main () {
     }
 
     // Convert to a C array for use with GPU
-    long long int **c_f_max = 
+    long long int **f_max_c = 
         (long long int **)calloc(net_shape.size(), sizeof(long long int*));
     for (int l = 0; l < net_shape.size(); l++) {
-        c_f_max[l] = f_max[l].memptr();
+        f_max_c[l] = f_max[l].memptr();
+    }
+
+    // Convert input firing times to C array
+    double **Fin_c = (double**)calloc(net_shape[0], sizeof(double *));
+    int *f_count_in = (int *)calloc(net_shape[0], sizeof(int));
+    for (int n = 0; n < net_shape[0]; n++) {
+        f_count_in[n] = Fin[n].size();
+        if (Fin[n].size() > 0) {
+            Fin_c[n] = (double *)&Fin[n][0];
+        }
     }
 
     // Do SRM0 simulation
-    //vector<vector<vector<double> > > Fcal;
-    ////Fcal = par_sim_body_arma(net_shape, Fin, Ws);
-    //Fcal = par_sim_body_c(net_shape, Fin, Ws);
+    double ***Fcal;
+    int **f_count = (int **)calloc(net_shape.size(), sizeof(int *));
+    //Fcal = par_sim_body_arma(net_shape, Fin, Ws);
+    Fcal = par_sim_body_c(&net_shape[0], net_shape.size(), Fin_c, 
+            f_count_in, f_max_c, Ws, f_count);
 
     // Print out the results
-    //for (int l = 0; l < Fcal.size(); l++) {
-    //    cout << "Layer:" << l << endl;
-    //    for (int n = 0; n < Fcal[l].size(); n++) {
-    //        for (int f = 0; f < Fcal[l][n].size(); f++) {
-    //            cout << "Value:" << endl;
-    //            cout << Fcal[l][n][f] << endl;
-    //        }
-    //    }
-    //}
-    //
+    for (int l = 0; l < net_shape.size(); l++) {
+        cout << "Layer:" << l << endl;
+        for (int n = 0; n < net_shape[l]; n++) {
+            for (int f = 0; f < f_count[l][n]; f++) {
+                cout << "Value:" << endl;
+                cout << Fcal[l][n][f] << endl;
+            }
+        }
+    }
+    
 
     for (int l = 0; l < net_shape.size(); l++) {
         cout << f_max[l] << endl;
