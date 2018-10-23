@@ -31,6 +31,17 @@ sizes <- c(n_in, n_h, n_out)
 Ws <- lapply(1:(length(sizes)-1), function(i) 
              matrix(rnorm(sizes[i]*sizes[i+1], 3), nrow = sizes[i], ncol = sizes[i+1]))
 
+# Calculate an upper bound on how many times a neuron will fire.
+predict_fire_counts <- function(Ws, Fin) {
+    counts <- list()
+    last_count <- sapply(Fin, length)
+    counts[[1]] <- last_count
+    for (l in 1:length(Ws)) {
+        counts[[l+1]] <- floor(tau / v_thresh * t(Ws[[l]]) %*% counts[[l]])
+    }
+    return(counts)
+}
+
 gon <- function(Ws, Fin) {
     ## Initialize Voltage Storage
     Vs <- list()
