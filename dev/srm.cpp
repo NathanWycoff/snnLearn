@@ -33,6 +33,16 @@ double iprekern(double dt) {
     return(-V_THRESH);
 }
 
+// The inner product function, uses the standard R^n inner product.
+double inner_prod(double *x, double *y, int n) {
+    double sum = 0;
+    for (int i = 0; i < n; i++) {
+        sum += x[i] * y[i];
+    }   
+    return(sum);
+}
+
+
 // Row-major Matrix-vector multiplication
 // A points to m many length n double pointers, each one of A's rows.
 // x is, of course, of length n.
@@ -272,9 +282,6 @@ double ***par_sim_body_c(int *net_shape, int n_layers,
         }
         Fcal[l+1] = Fi;
     }
-
-    occa::device device("mode: 'Serial'");
-    occa::kernel occa_main_loop;
 
     // Run actual inference
     par_c_main_loop(Vs, ALPHA, OMEGA, Fcal, f_count, Ws, net_shape, n_layers, 
