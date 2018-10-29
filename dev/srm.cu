@@ -203,8 +203,10 @@ __global__
 void par_c_main_loop(double ***Vs, double ***ALPHA, double ***OMEGA, double ***Fcal, int **f_count, double ***Ws, int* net_shape, int n_layers, 
         int t_steps) {
     double t;
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+    int stride = blockDim.x * gridDim.x;
     for (int l = 0; l < n_layers; l++) {
-        for (int n = 0; n < net_shape[l]; n++) {
+        for (int n = index; n < net_shape[l]; n += stride) {
             t = 0;
             for (int ti = 0; ti < t_steps; ti++) {
                 // Calculate total postsynaptic contribution 
@@ -359,7 +361,7 @@ double ***par_sim_body_c(int *net_shape, int n_layers,
     cudaMemcpy(u_net_shape, net_shape, n_layers * sizeof(int), cudaMemcpyDefault);
 
     // Run actual inference
-    par_c_main_loop<<<1, 1>>>(Vs, ALPHA, OMEGA, Fcal, f_count, u_Ws, u_net_shape, n_layers, 
+    par_c_main_loop<<<1, 3>>>(Vs, ALPHA, OMEGA, Fcal, f_count, u_Ws, u_net_shape, n_layers, 
             t_steps);
 
     // Clean up
