@@ -1,0 +1,4 @@
+module purge
+module load cuda/8.0.61
+module load intel/15.3
+module load R/3.5.0

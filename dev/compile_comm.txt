@@ -1,0 +1,16 @@
+# On newriver:
+nvcc -O3 -arch=sm_35 -G -I/opt/apps/cuda/8.0.61/include/ \
+    -I/opt/apps/intel15_3/R/3.5.0/lib64/R/include \
+    -L/opt/apps/intel15_3/R/3.5.0/lib64/R/lib -lcufft --shared -Xcompiler \
+    -fPIC -o dev/read_in.so dev/read_in.cu
+
+nvcc -I /home/nathw95/packs/include -L /home/nathw95/packs/lib64 dev/srm.cu -larmadillo 
+nvcc dev/read_in.cu
+
+R CMD SHLIB dev/read_weights.c
+
+# On pascal:
+nvcc -O3 -arch=sm_35 -G -I/usr/local/cuda-9.0/include \
+    -I/usr/share/R/include \
+    -L/usr/lib/R/lib -lcufft --shared -Xcompiler \
+    -fPIC -o dev/read_in.so dev/read_in.cu

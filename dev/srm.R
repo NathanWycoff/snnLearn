@@ -123,3 +123,4 @@ gon <- function(Ws, Fin) {
 }
 
 b <- gon(Ws, Fin)
+R_firings <- b[[1]]

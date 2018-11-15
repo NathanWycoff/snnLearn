@@ -198,8 +198,6 @@ double inner_prod(double *x, double *y, int n) {
 //}
 
 __global__
-//void par_c_main_loop(double ***Vs, double ***ALPHA, double ***OMEGA, double ***Fcal,
-//        int **f_count, double ***Ws, int *net_shape, int n_layers, int t_steps, double t_eps) {
 void par_c_main_loop(double ***Vs, double ***ALPHA, double ***OMEGA, double ***Fcal, int **f_count, double ***Ws, int* net_shape, int n_layers, 
         int t_steps) {
     double t;
@@ -233,7 +231,6 @@ void par_c_main_loop(double ***Vs, double ***ALPHA, double ***OMEGA, double ***F
 
                     // Check for firing neurons
                     if (Vs[l-1][n][ti+1] > V_THRESH) {
-                        //cout << f_count[l][n] << endl;
                         Fcal[l][n][f_count[l][n]] = t + t_eps;
                         f_count[l][n]++;
                     }
@@ -406,7 +403,10 @@ int main () {
             while(net_shape_ss) {
                 string s;
                 if (!getline(net_shape_ss, s, ',')) break;
-                net_shape.push_back(stoi(s));
+                //net_shape.push_back(stoi(s));
+                int x;
+                sscanf(s.c_str(), "%d", &x);
+                net_shape.push_back(x);
             }
 
             firstline = false;
@@ -427,7 +427,10 @@ int main () {
         while(firing_times_ss) {
             string s;
             if (!getline(firing_times_ss, s, ' ')) break;
-            Fline.push_back(stod(s));
+            //Fline.push_back(stod(s));
+            double x;
+            sscanf(s.c_str(), "%lf", &x);
+            Fline.push_back(x);
         }
 
         Fin.push_back(Fline);
@@ -462,6 +465,8 @@ int main () {
     }
 
     // Convert Connection weights to a C array
+    // Ws[i] is the ith layer, Ws[i][j] is the jth  column of layer i,
+    // Ws[i][j][k] is the k,j element of layer i (column major ordering).
     double ***Ws_c = (double***)calloc(net_shape.size()-1, sizeof(double**));
     for (int l = 0; l < net_shape.size()-1; l++) {
         Ws_c[l] = (double**)calloc(net_shape[l], sizeof(double*));
