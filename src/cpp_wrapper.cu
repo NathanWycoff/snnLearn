@@ -47,7 +47,7 @@ double inner_prod(double *x, double *y, int n) {
 
 
 __global__
-void par_c_main_loop(double ***Vs, double ***ALPHA, double ***OMEGA, double ***Fcal, int **f_count, double ***Ws, int* net_shape, int n_layers, 
+void par_c_main_loop(double ***Vs, double ***ALPHA, double ***OMEGA, double **Fcal_l, int **f_count, double ***Ws, int* net_shape, int n_layers, 
         int t_steps, int l) {
     double t;
     int index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -59,7 +59,7 @@ void par_c_main_loop(double ***Vs, double ***ALPHA, double ***OMEGA, double ***F
             int n_f = f_count[l][n];
             double psc = 0;
             for (int tfi = 0; tfi < n_f; tfi++) {
-                double tf = Fcal[l][n][tfi];
+                double tf = Fcal_l[n][tfi];
                 psc += ipostkern(t - tf);
             }
             ALPHA[l][ti][n] = psc;
@@ -69,7 +69,7 @@ void par_c_main_loop(double ***Vs, double ***ALPHA, double ***OMEGA, double ***F
                 n_f = f_count[l][n];
                 double ref = 0;
                 for (int tfi = 0; tfi < n_f; tfi++) {
-                    double tf = Fcal[l][n][tfi];
+                    double tf = Fcal_l[n][tfi];
                     ref += iprekern(t - tf);
                 }
                 OMEGA[l-1][n][ti] = ref;
@@ -81,7 +81,7 @@ void par_c_main_loop(double ***Vs, double ***ALPHA, double ***OMEGA, double ***F
 
                 // Check for firing neurons
                 if (Vs[l-1][n][ti+1] > V_THRESH) {
-                    Fcal[l][n][f_count[l][n]] = t + t_eps;
+                    Fcal_l[n][f_count[l][n]] = t + t_eps;
                     f_count[l][n]++;
                 }
             }
@@ -91,7 +91,7 @@ void par_c_main_loop(double ***Vs, double ***ALPHA, double ***OMEGA, double ***F
 }
 
 // The main simulation, using armadillo for matrix multiplication, and organized in such a way that we solve a sequence embarassingly parallelizable problems.
-double ***par_sim_body_c(int *net_shape, int n_layers,
+double **par_sim_body_c(int *net_shape, int n_layers,
         double **Fin, int *f_count_in, long long int **f_max, double ***Ws,
         int** f_count) {
     // Do simulation
@@ -263,7 +263,7 @@ double ***par_sim_body_c(int *net_shape, int n_layers,
     }
 
     for (int l = 0; l < n_layers; l++) {
-        par_c_main_loop<<<n_blocks, THREADS_PER_BLOCK>>>(Vs, ALPHA, OMEGA, u_Fcal, u_f_count, u_Ws, u_net_shape, n_layers, 
+        par_c_main_loop<<<n_blocks, THREADS_PER_BLOCK>>>(Vs, ALPHA, OMEGA, u_Fcal[l], u_f_count, u_Ws, u_net_shape, n_layers, 
                 t_steps, l);
         //par_c_main_loop<<<1, 1>>>(Vs, ALPHA, OMEGA, u_Fcal, u_f_count, u_Ws, u_net_shape, n_layers, 
         //        t_steps, l);
@@ -298,13 +298,19 @@ double ***par_sim_body_c(int *net_shape, int n_layers,
 
 
     // Copy Fcal to host memory
-    double ***Fcal = (double ***)malloc(n_layers * sizeof(double **));
-    for (int l = 0; l < n_layers; l++) {
-        Fcal[l] = (double **)malloc(net_shape[l] * sizeof(double *));
-        for (int n = 0; n < net_shape[l]; n++) {
-            Fcal[l][n] = (double *)malloc(f_max[l][n] * sizeof(double));
-            cudaMemcpy(Fcal[l][n], u_Fcal[l][n], f_max[l][n] * sizeof(double), cudaMemcpyDefault);
-        }
+    //double ***Fcal = (double ***)malloc(n_layers * sizeof(double **));
+    //for (int l = 0; l < n_layers; l++) {
+    //    Fcal[l] = (double **)malloc(net_shape[l] * sizeof(double *));
+    //    for (int n = 0; n < net_shape[l]; n++) {
+    //        Fcal[l][n] = (double *)malloc(f_max[l][n] * sizeof(double));
+    //        cudaMemcpy(Fcal[l][n], u_Fcal[l][n], f_max[l][n] * sizeof(double), cudaMemcpyDefault);
+    //    }
+    //}
+    // Copy output spikes to host memory
+    double **Fout = (double **)malloc(net_shape[n_layers]*sizeof(double*));
+    for (int n = 0; n < net_shape[n_layers-1]; n++) {
+        Fout[n] = (double *)malloc(f_max[n_layers-1][n] * sizeof(double));
+        cudaMemcpy(Fout[n], u_Fcal[n_layers-1][n], f_max[n_layers-1][n] * sizeof(double), cudaMemcpyDefault);
     }
 
     // Copy f_count to host memory
@@ -315,7 +321,7 @@ double ***par_sim_body_c(int *net_shape, int n_layers,
 
     //TODO: copy f_count
 
-    return(Fcal);
+    return(Fout);
 }
 
 int main () {
@@ -447,9 +453,9 @@ int main () {
     //}
 
     // Do SRM0 simulation
-    double ***Fcal;
+    double **Fout;
     int **f_count = (int **)calloc(net_shape.size(), sizeof(int *));
-    Fcal = par_sim_body_c(&net_shape[0], net_shape.size(), Fin_c, 
+    Fout = par_sim_body_c(&net_shape[0], net_shape.size(), Fin_c, 
             f_count_in, f_max, Ws_c, f_count);
 
     // Print out the results
