@@ -13,7 +13,7 @@
 // These should eventually be specifiable from R
 #define TAU 1
 #define V_THRESH 1.5
-#define t_eps 0.1
+#define t_eps 0.001
 #define THREADS_PER_BLOCK 512
 
 
@@ -95,7 +95,7 @@ double **par_sim_body_c(int *net_shape, int n_layers,
         double **Fin, int *f_count_in, long long int **f_max, double ***Ws,
         int** f_count) {
     // Do simulation
-    int t_steps = 35;
+    int t_steps = 3500;
 
     // Get the layer with the most neurons
     int max_neur = 0;
