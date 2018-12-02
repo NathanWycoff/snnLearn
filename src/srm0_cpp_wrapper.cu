@@ -7,17 +7,12 @@
 #include <vector>
 #include <algorithm>
 #include <unistd.h>
-#include "cool_file.h"
+#include "srm0.h"
 
 
 // NOTE: Need to compile in C++11 mode, add -std=c++11
 // These should eventually be specifiable from R
-#define TAU 1
-#define V_THRESH 1.5
-#define t_eps 0.0001
 #define THREADS_PER_BLOCK 512
-
-
 
 int main () {
     // Read in weight matrix and store as array.
@@ -48,15 +43,15 @@ int main () {
             firstline = false;
         }else {
             // Get the row and column size
-            int rows = (int)std::count(line.begin(), line.end(), ';') + 1;
-            double **W = (double **)malloc(rows * sizeof(double *));
+            int n_cols = (int)std::count(line.begin(), line.end(), ';') + 1;
+            double **W = (double **)malloc(n_cols * sizeof(double *));
             std::stringstream line_stream(line);
-            std::string row_string;
+            std::string col_string;
             int r = 0;
-            while(std::getline(line_stream, row_string, ';')) {
-                int rows = (int)std::count(row_string.begin(), row_string.end(), ' ') + 1;
-                double *col = (double *)malloc(rows * sizeof(double));
-                std::stringstream elem_stream(row_string);
+            while(std::getline(line_stream, col_string, ';')) {
+                int n_rows = (int)std::count(col_string.begin(), col_string.end(), ' ') + 1;
+                double *col = (double *)malloc(n_rows * sizeof(double));
+                std::stringstream elem_stream(col_string);
                 std::string elem;
                 int e = 0;
                 while (std::getline(elem_stream, elem, ' ')) {
@@ -148,10 +143,42 @@ int main () {
     //}
 
     // Do SRM0 simulation
+    int t_steps = 3500;
+    double t_eps = 0.001;
+    printf("Input validation:\n");
+    printf("n_layers: %d", n_layers);
+    printf("net_shape:\n");
+    for (int l = 0; l < n_layers; l++) {
+        printf("l %d = %d\n", l, net_shape[l]);
+    }
+    printf("Ws: \n");
+    // Print off Ws
+    for (int l = 0; l < n_layers-1; l++) {
+        printf("Layer %d\n", l);
+        for (int n1 = 0; n1 < net_shape[l+1]; n1++) {
+            printf("Col %d\n", n1);
+            for (int n2 = 0; n2 < net_shape[l]; n2++) {
+                printf("Row %d\n", n2);
+                printf("Val: %f\n", Ws_c[l][n1][n2]);
+            }
+        }
+    }
+    printf("Fin_c:\n");
+    for (int n = 0; n < net_shape[0]; n++) {
+        printf("Neuron %d:\n", n);
+        for (int f = 0; f < f_count_in[n]; f++) {
+            printf("Firing time %d: %f\n", n, Fin_c[n][f]);
+        }
+    }
+    printf("Scalar things:");
+    printf("n_layers: %d", n_layers);
+    printf("t_steps: %d", t_steps);
+    printf("t_eps: %f", t_eps);
+
     double **Fout;
     int **f_count = (int **)calloc(net_shape.size(), sizeof(int *));
     Fout = par_sim_body_c(&net_shape[0], net_shape.size(), Fin_c, 
-            f_count_in, f_max, Ws_c, f_count);
+            f_count_in, f_max, Ws_c, f_count, t_steps, t_eps);
 
     // Print out the results
     //for (int l = 0; l < net_shape.size(); l++) {
