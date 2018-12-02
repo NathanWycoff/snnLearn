@@ -10,13 +10,15 @@ srm0_R <- function(Ws, net_shape, Fin, t_steps, t_eps, tau = 1, v_thresh = 1.5) 
     dpostkern <- function(dt) as.numeric(dt>=0) * (-1)/tau * exp(-dt/tau)# Derivative of the kernel 
     iprekern <- function(dt) as.numeric(dt>=0) * -v_thresh# Integrated kernel
 
+    f_max <- predict_fire_counts(Ws, Fin)
+
     # Unpack some stuff
-    layers <- length(net_shape)
+    n_layers <- length(net_shape)
     n_in <- net_shape[1]
-    if (layers > 2) {
-        n_h <- net_shape[2:(layers-1)]
+    if (n_layers > 2) {
+        n_h <- net_shape[2:(n_layers-1)]
     }
-    n_out <- net_shape[layers]
+    n_out <- net_shape[n_layers]
 
     ## Initialize Voltage Storage
     Vs <- list()
@@ -43,8 +45,8 @@ srm0_R <- function(Ws, net_shape, Fin, t_steps, t_eps, tau = 1, v_thresh = 1.5) 
     ALPHA[[length(n_h) + 2]] <- matrix(NA, nrow = n_out, ncol = t_steps)
 
     ## Initialize synaptic contribution storage
-    GAMMA <- lapply(1:layers, function(l) matrix(NA, nrow = net_shape[l], ncol = t_steps))
-    GAMMAd <- lapply(1:layers, function(l) matrix(NA, nrow = net_shape[l], ncol = t_steps))
+    GAMMA <- lapply(1:n_out, function(i) list())
+    GAMMAd <- lapply(1:n_out, function(i) list())
 
     ## Initialize integrated refractory kernel
     OMEGA <- list()
@@ -71,7 +73,7 @@ srm0_R <- function(Ws, net_shape, Fin, t_steps, t_eps, tau = 1, v_thresh = 1.5) 
         ## Update the network, layer by layer
 
         # Calculate Post-synaptic Potential 
-        for (l in 1:layers) {
+        for (l in 1:n_layers) {
             ALPHA[[l]][,ti] <- sapply(Fcal[[l]], function(Fc) 
                    sum(as.numeric(sapply(Fc, function(tf) ipostkern(t - tf)))))
             OMEGA[[l]][,ti] <- sapply(Fcal[[l]], function(Fc) 
@@ -79,10 +81,10 @@ srm0_R <- function(Ws, net_shape, Fin, t_steps, t_eps, tau = 1, v_thresh = 1.5) 
         }
 
         # Calculate instantaneous contribution
-        for (l in 1:layers) {
-            GAMMA[[l]][,ti] <- sapply(Fcal[[l]], function(Fc) sum(as.numeric(sapply(Fc, function(tf) postkern(t - tf)))))
-            GAMMAd[[l]][,ti] <- sapply(Fcal[[l]], function(Fc) sum(as.numeric(sapply(Fc, function(tf) dpostkern(t - tf)))))
-        }
+        #for (l in 1:n_layers) {
+        #    GAMMA[[l]][,ti] <- sapply(Fcal[[l]], function(Fc) sum(as.numeric(sapply(Fc, function(tf) postkern(t - tf)))))
+        #    GAMMAd[[l]][,ti] <- sapply(Fcal[[l]], function(Fc) sum(as.numeric(sapply(Fc, function(tf) dpostkern(t - tf)))))
+        #}
 
         # Calculate inputs
         if (length(n_h) > 0) {
@@ -98,13 +100,20 @@ srm0_R <- function(Ws, net_shape, Fin, t_steps, t_eps, tau = 1, v_thresh = 1.5) 
             for (n in 1:nrow(Vs[[l]])) {
                 if (Vs[[l]][n,ti+1] > v_thresh) {
                     Fcal[[l+1]][[n]] <- c(Fcal[[l+1]][[n]], t + t_eps)
+                    # Record additional information if its an output neuron
+                    if (l == n_layers-1) {
+                        GAMMA[[n]][[length(GAMMA[[n]])+1]] <- lapply(1:n_layers, function(l) 
+                                                                   sapply(Fcal[[l]], function(Fc) sum(as.numeric(sapply(Fc, function(tf) postkern(t + t_eps - tf))))))
+                        GAMMAd[[n]][[length(GAMMAd[[n]])+1]] <- lapply(1:n_layers, function(l) 
+                                                                   sapply(Fcal[[l]], function(Fc) sum(as.numeric(sapply(Fc, function(tf) dpostkern(t + t_eps - tf))))))
+                    }
                 }
             }
         }
 
         t <- t + t_eps
     }
-    return(list(Fout = Fcal[[layers]], GAMMA = GAMMA, GAMMAd = GAMMAd))
+    return(list(Fout = Fcal[[n_layers]], GAMMA = GAMMA, GAMMAd = GAMMAd))
 }
 
 #' Wrapper for the SRM0 model written in cuda/C
