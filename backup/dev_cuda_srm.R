@@ -66,7 +66,7 @@ d <- vector_add(a, b)
 
 
 n_in <- 2
-n_out <- 1
+n_out <- 2
 n_h <- c(2,2)
 net_shape <- c(n_in, n_h, n_out)
 #Ws <- list(matrix(c(3.5), ncol = 1), matrix(c(3), ncol = 1))
@@ -79,41 +79,42 @@ sizes <- c(n_in, n_h, n_out)
 Ws <- lapply(1:(length(sizes)-1), function(i) 
              matrix(rnorm(sizes[i]*sizes[i+1], 3), nrow = sizes[i], ncol = sizes[i+1]))
 
-dyn.load('dev/read_in.so')
+dyn.load('src/srm0.so')
 
-# Calculate an upper bound on how many times a neuron will fire.
-predict_fire_counts <- function(Ws, Fin) {
-    counts <- list()
-    last_count <- sapply(Fin, length)
-    counts[[1]] <- last_count
-    for (l in 1:length(Ws)) {
-        counts[[l+1]] <- as.numeric(floor(tau / v_thresh * t(Ws[[l]]) %*% counts[[l]]))
-    }
-    return(counts)
-}
-
-v_thresh <- 1.5
-tau <- 1
 f_max <- predict_fire_counts(Ws, Fin)
 
 do_Ws <- function(Ws, net_shape, Fin) {
-    n <- length(net_shape)
+    L <- length(net_shape)
     w <- unlist(Ws)
-    c <- rep(0, n)
+    c <- rep(0, L)
     Finc <- unlist(Fin)
     f_count_in <- sapply(Fin, length)
     f_max_R <- unlist(f_max)
+    Flast <- rep(-1, sum(f_max[[length(f_max)]]))
+
     rst <- .C("gvectorAdd",
        as.double(w),
        as.integer(net_shape),
-       as.integer(n),
+       as.integer(L),
        as.double(Finc),
        as.integer(f_count_in),
-       as.integer(f_max_R));
+       as.integer(f_max_R),
+       as.double(Flast));
+
+    # Postprocess Flast from a flat double array to a list of doubles
+    Flast_d <- rst[[7]]
+    ret <- list()
+    counts <- c(0, cumsum(f_max[[L]]))
+    for (n in 1:net_shape[L]) {
+        ret[[n]] <-Flast_d[(counts[n]+1):counts[n+1]]
+    }
+    # Purge firing events which were not achieved (denoted by -1).
+    for (n in 1:net_shape[L]) {
+        if (sum(ret[[n]]==-1) > 0) {
+            ret[[n]] <- ret[[n]][which(ret[[n]]!=-1)]
+        }
+    }
+    return(ret)
 }
 
-do_Ws(Ws, net_shape, Fin)
-
-
-dyn.load("dev/read_in.so")
-.C("cool")
+a <- do_Ws(Ws, net_shape, Fin)

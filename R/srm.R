@@ -6,6 +6,8 @@ source('R/lib.R')
 srm0_R <- function(Ws, net_shape, Fin, t_steps, t_eps, tau = 1, v_thresh = 1.5) {
     ts <- seq(0, t_eps * (t_steps-1), by = t_eps)
     ipostkern <- function(dt) as.numeric(dt>=0) * tau * (1 - exp(-dt/tau))# Integrated kernel
+    postkern <- function(dt) as.numeric(dt>=0) * exp(-dt/tau)# Simply the kernel itself
+    dpostkern <- function(dt) as.numeric(dt>=0) * (-1)/tau * exp(-dt/tau)# Derivative of the kernel 
     iprekern <- function(dt) as.numeric(dt>=0) * -v_thresh# Integrated kernel
 
     # Unpack some stuff
@@ -40,6 +42,10 @@ srm0_R <- function(Ws, net_shape, Fin, t_steps, t_eps, tau = 1, v_thresh = 1.5) 
     }
     ALPHA[[length(n_h) + 2]] <- matrix(NA, nrow = n_out, ncol = t_steps)
 
+    ## Initialize synaptic contribution storage
+    GAMMA <- lapply(1:layers, function(l) matrix(NA, nrow = net_shape[l], ncol = t_steps))
+    GAMMAd <- lapply(1:layers, function(l) matrix(NA, nrow = net_shape[l], ncol = t_steps))
+
     ## Initialize integrated refractory kernel
     OMEGA <- list()
     OMEGA[[1]] <- matrix(NA, nrow = n_in, ncol = t_steps)
@@ -72,6 +78,12 @@ srm0_R <- function(Ws, net_shape, Fin, t_steps, t_eps, tau = 1, v_thresh = 1.5) 
                    sum(as.numeric(sapply(Fc, function(tf) iprekern(t - tf)))))
         }
 
+        # Calculate instantaneous contribution
+        for (l in 1:layers) {
+            GAMMA[[l]][,ti] <- sapply(Fcal[[l]], function(Fc) sum(as.numeric(sapply(Fc, function(tf) postkern(t - tf)))))
+            GAMMAd[[l]][,ti] <- sapply(Fcal[[l]], function(Fc) sum(as.numeric(sapply(Fc, function(tf) dpostkern(t - tf)))))
+        }
+
         # Calculate inputs
         if (length(n_h) > 0) {
             for (l in 1:length(n_h)) {
@@ -92,13 +104,16 @@ srm0_R <- function(Ws, net_shape, Fin, t_steps, t_eps, tau = 1, v_thresh = 1.5) 
 
         t <- t + t_eps
     }
-    return(list(Fcal, Vs))
+    return(list(Fout = Fcal[[layers]], GAMMA = GAMMA, GAMMAd = GAMMAd))
 }
-
 
 #' Wrapper for the SRM0 model written in cuda/C
 srm0_cu <- function(Ws, net_shape, Fin, t_steps, t_eps) {
 
+    # Calculate maximum firing times for each neuron
+    f_max <- predict_fire_counts(Ws, Fin)
+
+    # Prepare inputs for C
     L <- length(net_shape)
     w <- unlist(Ws)
     c <- rep(0, L)

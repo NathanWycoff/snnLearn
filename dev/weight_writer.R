@@ -9,7 +9,7 @@ n_neurons <- 3
 ipostkern <- function(dt) as.numeric(dt>=0) * tau * (1 - exp(-dt/tau))# Integrated kernel
 iprekern <- function(dt) as.numeric(dt>=0) * -v_thresh# Integrated kernel
 
-t_eps <- 0.1
+t_eps <- 0.001
 t_end <- 3.5
 ts <- seq(0, t_end, by = t_eps)
 t_steps <- length(ts)
@@ -19,7 +19,7 @@ v_reset <- 0
 
 n_in <- 10
 n_out <- 10
-n_h <- c(300, 300, 300)
+n_h <- c(10, 30, 40)
 net_shape <- c(n_in, n_h, n_out)
 layers <- 2 + length(n_h)
 #Ws <- list(matrix(c(3.5), ncol = 1), matrix(c(3), ncol = 1))
@@ -30,7 +30,7 @@ Fin <- lapply(1:n_in, function(l) runif(sample(2:20, 1), 0, t_end))
 set.seed(123)
 sizes <- c(n_in, n_h, n_out)
 Ws <- lapply(1:(length(sizes)-1), function(i) 
-             matrix(rnorm(sizes[i]*sizes[i+1], 0.1, 0.1), nrow = sizes[i], ncol = sizes[i+1]))
+             matrix(rnorm(sizes[i]*sizes[i+1], 0.14, 0.1), nrow = sizes[i], ncol = sizes[i+1]))
 
 f_max <- predict_fire_counts(Ws, Fin)
 

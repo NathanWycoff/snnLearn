@@ -45,7 +45,6 @@ double inner_prod(double *x, double *y, int n) {
     return(sum);
 }
 
-
 // Row-major Matrix-vector multiplication
 // A points to m many length n double pointers, each one of A's rows.
 // x is, of course, of length n.

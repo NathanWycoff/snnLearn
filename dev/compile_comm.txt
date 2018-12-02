@@ -2,15 +2,19 @@
 nvcc -O3 -arch=sm_35 -G -I/opt/apps/cuda/8.0.61/include/ \
     -I/opt/apps/intel15_3/R/3.5.0/lib64/R/include \
     -L/opt/apps/intel15_3/R/3.5.0/lib64/R/lib -lcufft --shared -Xcompiler \
-    -fPIC -o dev/read_in.so dev/read_in.cu
+    -fPIC -o dev/srm0.so src/srm0.cu
 
 nvcc -I /home/nathw95/packs/include -L /home/nathw95/packs/lib64 dev/srm.cu -larmadillo 
 nvcc dev/read_in.cu
 
 R CMD SHLIB dev/read_weights.c
 
-# On pascal:
+# On pascal (with R):
 nvcc -O3 -arch=sm_35 -G -I/usr/local/cuda-9.0/include \
     -I/usr/share/R/include \
+    -I/home/nathw95/snnLearn/src/ \
     -L/usr/lib/R/lib -lcufft --shared -Xcompiler \
-    -fPIC -o dev/read_in.so dev/read_in.cu
+    -fPIC src/srm0.cu src/srm0_R_wrapper.cu -o src/srm0.so 
+
+# On pascal (cpp interface):
+nvcc -std=c++11 -I/home/nathw95/snnLearn/src/ src/srm0.cu src/srm0_cpp_wrapper.cu -o groovy_program
