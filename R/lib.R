@@ -11,8 +11,7 @@ predict_fire_counts <- function(Ws, Fin, v_thresh = 1.5, tau = 1) {
     last_count <- sapply(Fin, length)
     counts[[1]] <- last_count
     for (l in 1:length(Ws)) {
-        counts[[l+1]] <- as.numeric(floor(tau / v_thresh * t(Ws[[l]]) %*% counts[[l]]))
+        counts[[l+1]] <- pmax(0, as.numeric(floor(tau / v_thresh * t(Ws[[l]]) %*% counts[[l]])))
     }
     return(counts)
 }
-

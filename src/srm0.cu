@@ -62,7 +62,7 @@ double inner_prod(double *x, double *y, int n) {
 }
 
 __global__
-void par_c_main_loop(double ***Vs, double ***ALPHA, double ***OMEGA, double ***Fcal, int **f_count, double ***Ws, int* net_shape, int n_layers, 
+void par_c_main_loop(double ***ALPHA, double ***OMEGA, double ***Fcal, int **f_count, double ***Ws, int* net_shape, int n_layers, 
         int t_steps, double t_eps, int l, double ****GAMMA, double ****GAMMAd, const bool copy_gamma) {
     double t;
     int index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -90,12 +90,12 @@ void par_c_main_loop(double ***Vs, double ***ALPHA, double ***OMEGA, double ***F
                 OMEGA[l-1][n][ti] = ref;
 
                 // Update potential
-                Vs[l-1][n][ti+1] = inner_prod(Ws[l-1][n], ALPHA[l-1][ti], net_shape[l-1]) + OMEGA[l-1][n][ti];
+                double V_n = inner_prod(Ws[l-1][n], ALPHA[l-1][ti], net_shape[l-1]) + OMEGA[l-1][n][ti];
                 //printf("l = %d, n = %d, ti = %d", l, n, ti);
                 //printf("Vsl = %d, n = %d, ti = %d", l, n, ti);
 
                 // Check for firing neurons
-                if (Vs[l-1][n][ti+1] > V_THRESH) {
+                if (V_n > V_THRESH) {
                     // If an output fire, record the neural state
                     if (copy_gamma && l == n_layers-1) {
                         for (int l1 = 0; l1 < n_layers; l1++) {
@@ -132,27 +132,6 @@ double **par_sim_body_c(int *net_shape, const int n_layers,
             max_neur = net_shape[l];
         }
     }
-
-    // Stores electric potential for each layer in row major order.
-    //double ***Vs = (double ***)calloc(n_layers-1, sizeof(double**));
-    double ***Vs;
-    cudaMallocManaged(&Vs, (n_layers-1) * sizeof(double **));
-    for (int i = 0; i < n_layers-1; i++) {
-        double **Vsi;
-        cudaMallocManaged(&Vsi, net_shape[i+1] * sizeof(double*));
-        Vs[i] = Vsi;
-        //Vs[i] = (double **)calloc(net_shape[i+1], sizeof(double*));
-        for (int j = 0; j < net_shape[i+1]; j++) {
-            double *Vsij;
-            cudaMallocManaged(&Vsij, (t_steps+1) * sizeof(double*));
-            Vsij[0] = 0;// Initialize voltage at resting potential, assumed 0.
-            Vs[i][j] = Vsij;
-            //Vs[i][j] = (double *)calloc(t_steps + 1, sizeof(double));
-        }
-    }
-
-    if (debug >= 1) 
-        printf("After Vs\n");
 
     // ALPHA stores integrated postsynaptic potential in column major order.
     // OMEGA stores integrated refractory contribution in row major order.
@@ -268,27 +247,29 @@ double **par_sim_body_c(int *net_shape, const int n_layers,
     // Do GAMMA(d)
     // d_GAMMA[on][fi][l]][[h] Gives the instantaneous postsynaptic current of neuron h of layer l to firing time fi of output neuron on.
     double ****d_GAMMA, ****d_GAMMAd;
-    cudaMallocManaged(&d_GAMMA, (n_layers-1) * sizeof(double***));
-    cudaMallocManaged(&d_GAMMAd, (n_layers-1) * sizeof(double***));
-    for (int on = 0; on < net_shape[n_layers-1]; on++) {
-        cudaMallocManaged(&d_GAMMA[on], f_max[n_layers-1][on] * sizeof(double **));
-        cudaMallocManaged(&d_GAMMAd[on], f_max[n_layers-1][on] * sizeof(double **));
-        for (int fi = 0; fi < f_max[n_layers-1][on]; fi++) {
-            cudaMallocManaged(&d_GAMMA[on][fi], n_layers * sizeof(double*));
-            cudaMallocManaged(&d_GAMMAd[on][fi], n_layers * sizeof(double*));
-            for (int l = 0; l < n_layers; l++) {
-                cudaMallocManaged(&d_GAMMA[on][fi][l], net_shape[l] * sizeof(double));
-                cudaMallocManaged(&d_GAMMAd[on][fi][l], net_shape[l] * sizeof(double));
-                for (int h = 0; h < net_shape[l]; h++) {
-                    d_GAMMA[on][fi][l][h] = -1;
-                    d_GAMMAd[on][fi][l][h] = -1;
+    if (copy_gamma) {
+        cudaMallocManaged(&d_GAMMA, (n_layers-1) * sizeof(double***));
+        cudaMallocManaged(&d_GAMMAd, (n_layers-1) * sizeof(double***));
+        for (int on = 0; on < net_shape[n_layers-1]; on++) {
+            cudaMallocManaged(&d_GAMMA[on], f_max[n_layers-1][on] * sizeof(double **));
+            cudaMallocManaged(&d_GAMMAd[on], f_max[n_layers-1][on] * sizeof(double **));
+            for (int fi = 0; fi < f_max[n_layers-1][on]; fi++) {
+                cudaMallocManaged(&d_GAMMA[on][fi], n_layers * sizeof(double*));
+                cudaMallocManaged(&d_GAMMAd[on][fi], n_layers * sizeof(double*));
+                for (int l = 0; l < n_layers; l++) {
+                    cudaMallocManaged(&d_GAMMA[on][fi][l], net_shape[l] * sizeof(double));
+                    cudaMallocManaged(&d_GAMMAd[on][fi][l], net_shape[l] * sizeof(double));
+                    for (int h = 0; h < net_shape[l]; h++) {
+                        d_GAMMA[on][fi][l][h] = -1;
+                        d_GAMMAd[on][fi][l][h] = -1;
+                    }
                 }
             }
         }
+        if (debug >= 1) 
+            printf("Initted GAMMA storage \n");
     }
 
-    if (debug >= 1) 
-        printf("Initted GAMMA storage \n");
 
     // Copy weights to unified memory
     double ***u_Ws;
@@ -321,23 +302,17 @@ double **par_sim_body_c(int *net_shape, const int n_layers,
     for (int l = 0; l < n_layers; l++) {
         if (debug >= 1) 
             printf(" Solving Layer %d...\n", l);
-        par_c_main_loop<<<n_blocks, THREADS_PER_BLOCK>>>(Vs, ALPHA, OMEGA, u_Fcal, u_f_count, u_Ws, u_net_shape, n_layers, 
+
+        par_c_main_loop<<<n_blocks, THREADS_PER_BLOCK>>>(ALPHA, OMEGA, u_Fcal, u_f_count, u_Ws, u_net_shape, n_layers, 
                 t_steps, t_eps, l, d_GAMMA, d_GAMMAd, copy_gamma);
+
+        cudaDeviceSynchronize();
     }
-    cudaDeviceSynchronize();
 
     if (debug >= 1) 
         printf("After main loop\n");
 
     // Clean up
-    for (int i = 0; i < n_layers-1; i++) {
-        for (int j = 0; j < net_shape[i+1]; j++) {
-            cudaFree(Vs[i][j]); 
-        }
-        cudaFree(Vs[i]);
-    }
-    cudaFree(Vs);
-
     for (int i = 0; i < n_layers; i++) {
         for (int j = 0; j < t_steps; j++) {
             cudaFree(ALPHA[i][j]);
