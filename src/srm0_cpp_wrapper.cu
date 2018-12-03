@@ -143,8 +143,8 @@ int main () {
     //}
 
     // Do SRM0 simulation
-    int t_steps = 3500;
-    double t_eps = 0.001;
+    int t_steps = 35;
+    double t_eps = 0.1;
     printf("Input validation:\n");
     printf("n_layers: %d", n_layers);
     printf("net_shape:\n");
@@ -177,8 +177,10 @@ int main () {
 
     double **Fout;
     int **f_count = (int **)calloc(net_shape.size(), sizeof(int *));
+    double ****GAMMA = (double****)malloc((net_shape.size()-1) * sizeof(double***));
+    double ****GAMMAd = (double****)malloc((net_shape.size()-1) * sizeof(double***));
     Fout = par_sim_body_c(&net_shape[0], net_shape.size(), Fin_c, 
-            f_count_in, f_max, Ws_c, f_count, t_steps, t_eps);
+            f_count_in, f_max, Ws_c, f_count, t_steps, t_eps, GAMMA, GAMMAd);
 
     // Print out the results
     //for (int l = 0; l < net_shape.size(); l++) {
@@ -197,6 +199,18 @@ int main () {
     }
 
     //TODO: free things at some point.
+
+    // Print out GAMMA
+    // d_GAMMA[on][fi][l]][[h] Gives the instantaneous postsynaptic current of neuron h of layer l to firing time fi of output neuron on.
+    for (int on = 0; on < net_shape[n_layers-1]; on++) {
+        for (int fi = 0; fi < f_max[n_layers-1][on]; fi++) {
+            for (int l = 0; l < n_layers; l++) {
+                for (int h = 0; h < net_shape[l]; h++) {
+                }
+            }
+        }
+    }
+
 
     return 0;
 }

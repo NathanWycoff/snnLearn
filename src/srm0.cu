@@ -24,6 +24,24 @@ double ipostkern(double dt) {
     return(TAU * (1 - exp(-dt / TAU)));
 }
 
+// Postsynaptic Kernel
+__host__ __device__
+double postkern(double dt) {
+    if (dt < 0) {
+        return(0);
+    }
+    return(exp(-dt / TAU));
+}
+
+// Postsynaptic Kernel
+__host__ __device__
+double dpostkern(double dt) {
+    if (dt < 0) {
+        return(0);
+    }
+    return((-1.0) / TAU * exp(-dt / TAU));
+}
+
 // Integrated refractory kernel.
 __host__ __device__
 double iprekern(double dt) {
@@ -44,8 +62,8 @@ double inner_prod(double *x, double *y, int n) {
 }
 
 __global__
-void par_c_main_loop(double ***Vs, double ***ALPHA, double ***OMEGA, double **Fcal_l, int **f_count, double ***Ws, int* net_shape, int n_layers, 
-        int t_steps, double t_eps, int l) {
+void par_c_main_loop(double ***Vs, double ***ALPHA, double ***OMEGA, double ***Fcal, int **f_count, double ***Ws, int* net_shape, int n_layers, 
+        int t_steps, double t_eps, int l, double ****GAMMA, double ****GAMMAd) {
     double t;
     int index = blockIdx.x * blockDim.x + threadIdx.x;
     int stride = blockDim.x * gridDim.x;
@@ -56,7 +74,7 @@ void par_c_main_loop(double ***Vs, double ***ALPHA, double ***OMEGA, double **Fc
             int n_f = f_count[l][n];
             double psc = 0;
             for (int tfi = 0; tfi < n_f; tfi++) {
-                double tf = Fcal_l[n][tfi];
+                double tf = Fcal[l][n][tfi];
                 psc += ipostkern(t - tf);
             }
             ALPHA[l][ti][n] = psc;
@@ -66,7 +84,7 @@ void par_c_main_loop(double ***Vs, double ***ALPHA, double ***OMEGA, double **Fc
                 n_f = f_count[l][n];
                 double ref = 0;
                 for (int tfi = 0; tfi < n_f; tfi++) {
-                    double tf = Fcal_l[n][tfi];
+                    double tf = Fcal[l][n][tfi];
                     ref += iprekern(t - tf);
                 }
                 OMEGA[l-1][n][ti] = ref;
@@ -78,7 +96,21 @@ void par_c_main_loop(double ***Vs, double ***ALPHA, double ***OMEGA, double **Fc
 
                 // Check for firing neurons
                 if (Vs[l-1][n][ti+1] > V_THRESH) {
-                    Fcal_l[n][f_count[l][n]] = t + t_eps;
+                    // If an output fire, record the neural state
+                    if (l == n_layers-1) {
+                        for (int l1 = 0; l1 < n_layers; l1++) {
+                            for (int h = 0; h < net_shape[l1]; h++) {
+                                GAMMA[n][f_count[l][n]][l1][h] = 0;
+                                GAMMAd[n][f_count[l][n]][l1][h] = 0;
+                                for (int ti = 0; ti < f_count[l1][h]; ti++) {
+                                    double tf = Fcal[l1][h][ti];
+                                    GAMMA[n][f_count[l][n]][l1][h] += postkern(t + t_eps - tf);
+                                    GAMMAd[n][f_count[l][n]][l1][h] += dpostkern(t + t_eps - tf);
+                                }
+                            }
+                        }
+                    }
+                    Fcal[l][n][f_count[l][n]] = t + t_eps;
                     f_count[l][n]++;
                 }
             }
@@ -87,10 +119,11 @@ void par_c_main_loop(double ***Vs, double ***ALPHA, double ***OMEGA, double **Fc
     }
 }
 
+
 // The main simulation, using armadillo for matrix multiplication, and organized in such a way that we solve a sequence embarassingly parallelizable problems.
 double **par_sim_body_c(int *net_shape, int n_layers,
         double **Fin, int *f_count_in, long long int **f_max, double ***Ws,
-        int** f_count, int t_steps, double t_eps) {
+        int** f_count, int t_steps, double t_eps, double ****GAMMA, double ****GAMMAd, int debug) {
 
     // Get the layer with the most neurons
     int max_neur = 0;
@@ -118,7 +151,8 @@ double **par_sim_body_c(int *net_shape, int n_layers,
         }
     }
 
-    printf("After Vs\n");
+    if (debug >= 1) 
+        printf("After Vs\n");
 
     // ALPHA stores integrated postsynaptic potential in column major order.
     // OMEGA stores integrated refractory contribution in row major order.
@@ -152,7 +186,8 @@ double **par_sim_body_c(int *net_shape, int n_layers,
         }
     }
 
-    printf("After ALPHA\n");
+    if (debug >= 1) 
+        printf("After ALPHA\n");
 
     // Storage for firing times
     //double ***u_Fcal = (double ***)calloc(n_layers, sizeof(double**));
@@ -169,7 +204,8 @@ double **par_sim_body_c(int *net_shape, int n_layers,
         u_Fin[n] = u_Finn;
     }
 
-    printf("After inputs \n");
+    if (debug >= 1) 
+        printf("After inputs \n");
 
     //int **myarr = (int **)malloc(2*sizeof(int *));
     //myarr[0] = (int **)malloc(2*sizeof(int));
@@ -214,7 +250,8 @@ double **par_sim_body_c(int *net_shape, int n_layers,
         }
     }
 
-    printf("After Fi copy\n");
+    if (debug >= 1) 
+        printf("After Fi copy\n");
 
     //// Convert Connection weights to a C array
     //// Ws[i] is the ith layer, Ws[i][j] is the jth row of layer i,
@@ -228,6 +265,30 @@ double **par_sim_body_c(int *net_shape, int n_layers,
     //}
 
 
+    // Do GAMMA(d)
+    // d_GAMMA[on][fi][l]][[h] Gives the instantaneous postsynaptic current of neuron h of layer l to firing time fi of output neuron on.
+    double ****d_GAMMA, ****d_GAMMAd;
+    cudaMallocManaged(&d_GAMMA, (n_layers-1) * sizeof(double***));
+    cudaMallocManaged(&d_GAMMAd, (n_layers-1) * sizeof(double***));
+    for (int on = 0; on < net_shape[n_layers-1]; on++) {
+        cudaMallocManaged(&d_GAMMA[on], f_max[n_layers-1][on] * sizeof(double **));
+        cudaMallocManaged(&d_GAMMAd[on], f_max[n_layers-1][on] * sizeof(double **));
+        for (int fi = 0; fi < f_max[n_layers-1][on]; fi++) {
+            cudaMallocManaged(&d_GAMMA[on][fi], n_layers * sizeof(double*));
+            cudaMallocManaged(&d_GAMMAd[on][fi], n_layers * sizeof(double*));
+            for (int l = 0; l < n_layers; l++) {
+                cudaMallocManaged(&d_GAMMA[on][fi][l], net_shape[l] * sizeof(double));
+                cudaMallocManaged(&d_GAMMAd[on][fi][l], net_shape[l] * sizeof(double));
+                for (int h = 0; h < net_shape[l]; h++) {
+                    d_GAMMA[on][fi][l][h] = -1;
+                    d_GAMMAd[on][fi][l][h] = -1;
+                }
+            }
+        }
+    }
+
+    if (debug >= 1) 
+        printf("Initted GAMMA storage \n");
 
     // Copy weights to unified memory
     double ***u_Ws;
@@ -244,7 +305,8 @@ double **par_sim_body_c(int *net_shape, int n_layers,
         }
     }
 
-    printf("After Weights copy\n");
+    if (debug >= 1) 
+        printf("After Weights copy\n");
 
     // Copy network shape to unified memory
     int *u_net_shape;
@@ -253,22 +315,21 @@ double **par_sim_body_c(int *net_shape, int n_layers,
 
     // Run actual inference
     //TODO: Should just be + 1
-    int n_blocks = max_neur / THREADS_PER_BLOCK;
-    if (n_blocks == 0) {
-        n_blocks = 1;
-    }
+    int n_blocks = max_neur / THREADS_PER_BLOCK + 1;
 
     // Main Loop
     for (int l = 0; l < n_layers; l++) {
-        printf(" Solving Layer %d...\n", l);
-        par_c_main_loop<<<n_blocks, THREADS_PER_BLOCK>>>(Vs, ALPHA, OMEGA, u_Fcal[l], u_f_count, u_Ws, u_net_shape, n_layers, 
-                t_steps, t_eps, l);
+        if (debug >= 1) 
+            printf(" Solving Layer %d...\n", l);
+        par_c_main_loop<<<n_blocks, THREADS_PER_BLOCK>>>(Vs, ALPHA, OMEGA, u_Fcal, u_f_count, u_Ws, u_net_shape, n_layers, 
+                t_steps, t_eps, l, d_GAMMA, d_GAMMAd);
         //par_c_main_loop<<<1, 1>>>(Vs, ALPHA, OMEGA, u_Fcal, u_f_count, u_Ws, u_net_shape, n_layers, 
         //        t_steps, l);
     }
     cudaDeviceSynchronize();
 
-    printf("After main loop\n");
+    if (debug >= 1) 
+        printf("After main loop\n");
 
     // Clean up
     for (int i = 0; i < n_layers-1; i++) {
@@ -294,7 +355,8 @@ double **par_sim_body_c(int *net_shape, int n_layers,
     cudaFree(ALPHA);
     cudaFree(OMEGA);
 
-    printf("After Free\n");
+    if (debug >= 1) 
+        printf("After Free\n");
 
     // Copy Fcal to host memory
     //double ***Fcal = (double ***)malloc(n_layers * sizeof(double **));
@@ -319,7 +381,28 @@ double **par_sim_body_c(int *net_shape, int n_layers,
         cudaMemcpy(f_count[l], u_f_count[l], net_shape[l] * sizeof(int), cudaMemcpyDefault);
     }
 
-    printf("After ouptut spike copy\n");
+    // Copy to host memory
+    // d_GAMMA[on][fi][l]][[h] Gives the instantaneous postsynaptic current of neuron h of layer l to firing time fi of output neuron on.
+    //GAMMA = (double****)malloc((n_layers-1) * sizeof(double***));
+    //GAMMAd = (double****)malloc((n_layers-1) * sizeof(double***));
+    for (int on = 0; on < net_shape[n_layers-1]; on++) {
+        GAMMA[on] = (double***)malloc(f_max[n_layers-1][on] * sizeof(double**));
+        GAMMAd[on] = (double***)malloc(f_max[n_layers-1][on] * sizeof(double**));
+        for (int fi = 0; fi < f_max[n_layers-1][on]; fi++) {
+            GAMMA[on][fi] = (double**)malloc(n_layers * sizeof(double*));
+            GAMMAd[on][fi] = (double**)malloc(n_layers * sizeof(double*));
+            for (int l = 0; l < n_layers; l++) {
+                GAMMA[on][fi][l] = (double*)malloc(net_shape[l] * sizeof(double));
+                GAMMAd[on][fi][l] = (double*)malloc(net_shape[l] * sizeof(double));
+                cudaMemcpy(GAMMA[on][fi][l], d_GAMMA[on][fi][l], net_shape[l] * sizeof(double), cudaMemcpyDefault);
+                cudaMemcpy(GAMMAd[on][fi][l], d_GAMMAd[on][fi][l], net_shape[l] * sizeof(double), cudaMemcpyDefault);
+            }
+        }
+    }
+
+
+    if (debug >= 1) 
+        printf("After ouptut spike copy\n");
 
     //TODO: copy f_count
 

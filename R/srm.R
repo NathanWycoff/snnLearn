@@ -117,43 +117,73 @@ srm0_R <- function(Ws, net_shape, Fin, t_steps, t_eps, tau = 1, v_thresh = 1.5) 
 }
 
 #' Wrapper for the SRM0 model written in cuda/C
-srm0_cu <- function(Ws, net_shape, Fin, t_steps, t_eps) {
+srm0_cu <- function(Ws, net_shape, Fin, t_steps, t_eps, debug_in = 0) {
 
     # Calculate maximum firing times for each neuron
     f_max <- predict_fire_counts(Ws, Fin)
 
     # Prepare inputs for C
-    L <- length(net_shape)
+    n_layers <- length(net_shape)
     w <- unlist(Ws)
-    c <- rep(0, L)
+    c <- rep(0, n_layers)
     Finc <- unlist(Fin)
     f_count_in <- sapply(Fin, length)
     f_max_R <- unlist(f_max)
     Flast <- rep(-1, sum(f_max[[length(f_max)]]))
+    gamma <- rep(-1, sum(net_shape) * sum(f_max[[length(f_max)]]))
+    gammad <- rep(-1, sum(net_shape) * sum(f_max[[length(f_max)]]))
+    debug <- c(debug_in)
 
     rst <- .C("gvectorAdd",
        as.double(w),
        as.integer(net_shape),
-       as.integer(L),
+       as.integer(n_layers),
        as.double(Finc),
        as.integer(f_count_in),
        as.integer(f_max_R),
        as.double(Flast),
        as.integer(t_steps),
-       as.double(t_eps));
+       as.double(t_eps),
+       as.double(gamma),
+       as.double(gammad),
+       as.integer(debug));
 
-    # Postprocess Flast from a flat double array to a list of doubles
+    # Unpack some results
     Flast_d <- rst[[7]]
-    ret <- list()
-    counts <- c(0, cumsum(f_max[[L]]))
-    for (n in 1:net_shape[L]) {
-        ret[[n]] <-Flast_d[(counts[n]+1):counts[n+1]]
-    }
-    # Purge firing events which were not achieved (denoted by -1).
-    for (n in 1:net_shape[L]) {
-        if (sum(ret[[n]]==-1) > 0) {
-            ret[[n]] <- ret[[n]][which(ret[[n]]!=-1)]
+    gamma_d <- rst[[10]]
+    gammad_d <- rst[[11]]
+    Fout <- list()
+    GAMMA <- list()
+    GAMMAd <- list()
+    counts <- c(0, cumsum(f_max[[n_layers]]))
+    counter = 0
+    for (n in 1:net_shape[n_layers]) {
+        # Postprocess Flast from a flat double array to a list of doubles
+        Fout[[n]] <- Flast_d[(counts[n]+1):counts[n+1]]
+        # And gammas as well
+        GAMMA[[n]] <- list()
+        GAMMAd[[n]] <- list()
+        for (fi in 1:f_max[[length(f_max)]][n]) {
+            GAMMA[[n]][[fi]] <- list()
+            GAMMAd[[n]][[fi]] <- list()
+            for (l in 1:n_layers) {
+                GAMMA[[n]][[fi]][[l]] <- rep(NA, net_shape[l])
+                GAMMAd[[n]][[fi]][[l]] <- rep(NA, net_shape[l])
+                for (h in 1:net_shape[l]) {
+                    counter <- counter + 1
+                    GAMMA[[n]][[fi]][[l]][h] <- gamma_d[counter]
+                    GAMMAd[[n]][[fi]][[l]][h] <- gammad_d[counter]
+                }
+            }
         }
     }
-    return(ret)
+    # Purge firing events which were not achieved (denoted by -1).
+    for (n in 1:net_shape[n_layers]) {
+        if (sum(Fout[[n]]==-1) > 0) {
+            Fout[[n]] <- Fout[[n]][which(Fout[[n]]!=-1)]
+            GAMMA[[n]] <- GAMMA[[n]][which(Fout[[n]]!=-1)]
+            GAMMAd[[n]] <- GAMMAd[[n]][which(Fout[[n]]!=-1)]
+        }
+    }
+    return(list(Fout = Fout, GAMMA = GAMMA, GAMMAd = GAMMAd))
 }

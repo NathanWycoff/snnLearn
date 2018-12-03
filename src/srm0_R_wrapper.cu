@@ -6,14 +6,15 @@
 #include <unistd.h>
 #include "srm0.h"
 
-extern "C" void gvectorAdd(double *Ws_in, int *net_shape, int *n_layersp, double *Fin, int *f_count_in, int *f_max_R, double *Flast, int *t_steps_R, double *t_eps_R);
+extern "C" void gvectorAdd(double *Ws_in, int *net_shape, int *n_layersp, double *Fin, int *f_count_in, int *f_max_R, double *Flast, int *t_steps_R, double *t_eps_R, double *gamma, double *gammad, int *debug_R);
 //extern void gvectorAdd(double *Ws_in, int *net_shape, int *n_layersp, double *Fin, int *f_count_in, int *f_max_R);
 
-void gvectorAdd(double *Ws_in, int *net_shape, int *n_layersp, double *Fin, int *f_count_in, int *f_max_R, double *Flast, int *t_steps_R, double *t_eps_R) {
+void gvectorAdd(double *Ws_in, int *net_shape, int *n_layersp, double *Fin, int *f_count_in, int *f_max_R, double *Flast, int *t_steps_R, double *t_eps_R, double *gamma, double *gammad, int *debug_R) {
     // R only passes pointers.
     int n_layers = *n_layersp;
     int t_steps = *t_steps_R;
     double t_eps = *t_eps_R;
+    int debug = *debug_R;
     
     // Calculate the cumulative size of each layer's weight matrix
     int *wlo = (int *)calloc(n_layers-1, sizeof(int *));
@@ -74,43 +75,46 @@ void gvectorAdd(double *Ws_in, int *net_shape, int *n_layersp, double *Fin, int 
         }
     }
 
-    printf("Input validation:\n");
-    printf("n_layers: %d", n_layers);
-    printf("net_shape:\n");
-    for (int l = 0; l < n_layers; l++) {
-        printf("l %d = %d\n", l, net_shape[l]);
-    }
-    printf("Ws: \n");
-    // Print off Ws
-    for (int l = 0; l < n_layers-1; l++) {
-        printf("Layer %d\n", l);
-        for (int n1 = 0; n1 < net_shape[l+1]; n1++) {
-            printf("Col %d\n", n1);
-            for (int n2 = 0; n2 < net_shape[l]; n2++) {
-                printf("Row %d\n", n2);
-                printf("Val: %f\n", Ws_c[l][n1][n2]);
-            }
-        }
-    }
-    printf("Fin_c:\n");
-    for (int n = 0; n < net_shape[0]; n++) {
-        printf("Neuron %d:\n", n);
-        for (int f = 0; f < f_count_in[n]; f++) {
-            printf("Firing time %d: %f\n", n, Fin_c[n][f]);
-        }
-    }
-    printf("Scalar things:");
-    printf("n_layers: %d", n_layers);
-    printf("t_steps: %d", t_steps);
-    printf("t_eps: %f", t_eps);
+    //printf("Input validation:\n");
+    //printf("n_layers: %d", n_layers);
+    //printf("net_shape:\n");
+    //for (int l = 0; l < n_layers; l++) {
+    //    printf("l %d = %d\n", l, net_shape[l]);
+    //}
+    //printf("Ws: \n");
+    //// Print off Ws
+    //for (int l = 0; l < n_layers-1; l++) {
+    //    printf("Layer %d\n", l);
+    //    for (int n1 = 0; n1 < net_shape[l+1]; n1++) {
+    //        printf("Col %d\n", n1);
+    //        for (int n2 = 0; n2 < net_shape[l]; n2++) {
+    //            printf("Row %d\n", n2);
+    //            printf("Val: %f\n", Ws_c[l][n1][n2]);
+    //        }
+    //    }
+    //}
+    //printf("Fin_c:\n");
+    //for (int n = 0; n < net_shape[0]; n++) {
+    //    printf("Neuron %d:\n", n);
+    //    for (int f = 0; f < f_count_in[n]; f++) {
+    //        printf("Firing time %d: %f\n", n, Fin_c[n][f]);
+    //    }
+    //}
+    //printf("Scalar things:");
+    //printf("n_layers: %d", n_layers);
+    //printf("t_steps: %d", t_steps);
+    //printf("t_eps: %f", t_eps);
 
     // Do SRM0 simulation
     double **Fout;
     //int **f_count = (int **)calloc(net_shape.size(), sizeof(int *));
     int **f_count;
+    //double ****GAMMA, ****GAMMAd;
+    double ****GAMMA = (double****)malloc((n_layers-1) * sizeof(double***));
+    double ****GAMMAd = (double****)malloc((n_layers-1) * sizeof(double***));
     cudaMallocManaged(&f_count, n_layers * sizeof(int *));
     Fout = par_sim_body_c(net_shape, n_layers, Fin_c, 
-            f_count_in, f_max_c, Ws_c, f_count, t_steps, t_eps);
+            f_count_in, f_max_c, Ws_c, f_count, t_steps, t_eps, GAMMA, GAMMAd, debug);
 
     // Print out the results
     //for (int l = 0; l < n_layers; l++) {
@@ -130,26 +134,63 @@ void gvectorAdd(double *Ws_in, int *net_shape, int *n_layersp, double *Fin, int 
     //    }
     //}
 
-    // Print out fire counts
+    // Turn GAMMA and GAMMA_d into  flat arrays
+    // d_GAMMA[on][fi][l]][[h] Gives the instantaneous postsynaptic current of neuron h of layer l to firing time fi of output neuron on.
+    //for (int on = 0; on < net_shape[n_layers-1]; on++) {
+    //    printf("ON: %d\n", on);
+    //    for (int fi = 0; fi < f_max[n_layers-1][on]; fi++) {
+    //        printf("fi: %d\n", fi);
+    //        for (int l = 0; l < n_layers; l++) {
+    //            printf("l: %d\n", l);
+    //            for (int h = 0; h < net_shape[l]; h++) {
+    //                printf("G: %f|| dG: %f\n", GAMMA[on][fi][l][h], GAMMAd[on][fi][l][h]);
+    //            }
+    //        }
+    //    }
+    //}
+
+    // Count up occurences
+    int *cum_shape = (int *)calloc((n_layers+1), sizeof(int));
+    for (int l = 0; l < n_layers; l++) {
+        cum_shape[l+1] = net_shape[l] + cum_shape[l];
+    }
+    // Cumulative Firing events for the output layer
+    int *fire_cum =  (int *)calloc(net_shape[n_layers-1]+1, sizeof(int));
     for (int n = 0; n < net_shape[n_layers-1]; n++) {
-        printf("Output Neuron %d had %d firing events\n", n, f_count[n_layers-1][n]);
+        fire_cum[n+1] = f_max[n_layers-1][n] + fire_cum[n];
     }
 
-    // Pack up the last layer's firing times.
-    int *cum_fires = (int *)calloc(net_shape[n_layers-1], sizeof(int));
-    for (int n = 0; n < net_shape[n_layers-1]; n++) {
-        if (n == 0) {
-            cum_fires[n] = 0;
-        } else {
-            cum_fires[n] = cum_fires[n-1] + f_max[n_layers-1][n-1];
+    //double *gamma = (double *)malloc(fire_cum[net_shape[n_layers-1]] * cum_shape[n_layers] * sizeof(double));
+    for (int on = 0; on < net_shape[n_layers-1]; on++) {
+        //printf("ON: %d\n", on);
+        for (int fi = 0; fi < f_max[n_layers-1][on]; fi++) {
+            //printf("fi: %d\n", fi);
+            for (int l = 0; l < n_layers; l++) {
+                //printf("l: %d\n", l);
+                for (int h = 0; h < net_shape[l]; h++) {
+                    //printf("G: %f|| dG: %f\n", GAMMA[on][fi][l][h], GAMMAd[on][fi][l][h]);
+                    int ind = (fire_cum[on] + fi) * cum_shape[n_layers] + cum_shape[l] + h;
+                    //printf("Total Capacity: %d", fire_cum[net_shape[n_layers-1]] * cum_shape[n_layers]);
+                    //printf("Realized Capacity: %d", ind);
+                    gamma[ind] = GAMMA[on][fi][l][h];
+                    gammad[ind] = GAMMAd[on][fi][l][h];
+                }
+            }
         }
     }
 
+    // Print out fire counts
+    if (debug > 0) {
+        for (int n = 0; n < net_shape[n_layers-1]; n++) {
+            printf("Output Neuron %d had %d firing events\n", n, f_count[n_layers-1][n]);
+        }
+    }
     //Flast = (double *)calloc(cum_fires[net_shape[n_layers-1]], sizeof(double));
+    int counter = 0;
     for (int n = 0; n < net_shape[n_layers-1]; n++) {
         for (int f = 0; f < f_max[n_layers-1][n]; f++) {
-            printf("Assigning value %f\n", Fout[n][f]);
-            Flast[f + cum_fires[n]] = Fout[n][f];
+            Flast[counter] = Fout[n][f];
+            counter++;
         }
     }
 

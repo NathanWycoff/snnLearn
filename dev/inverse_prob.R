@@ -9,7 +9,7 @@ postkern <- function(dt) as.numeric(dt>=0) * exp(-dt/tau)# Simply the kernel its
 dpostkernd <- function(dt) as.numeric(dt>=0) * (-1)/tau * exp(-dt/tau)# Derivative of the kernel 
 iprekern <- function(dt) as.numeric(dt>=0) * -v_thresh# Integrated kernel
 
-t_eps <- 0.1
+t_eps <- 0.01
 t_end <- 5
 ts <- seq(0, t_end, by = t_eps)
 t_steps <- length(ts)
@@ -17,9 +17,9 @@ t_steps <- length(ts)
 v_thresh <- 1.5
 v_reset <- 0
 
-n_in <- 3
-n_out <- 1
-n_h <- c(3, 2)
+n_in <- 100
+n_out <- 2
+n_h <- c(30, 20)
 net_shape <- c(n_in, n_h, n_out)
 n_layers <- 2 + length(n_h)
 #Ws <- list(matrix(c(3.5), ncol = 1), matrix(c(3), ncol = 1))
@@ -41,19 +41,19 @@ ret <- srm0_R(Ws, net_shape, Fin, t_steps, t_eps)
 #TODO: generalize t_desired to multiple per point
 #TODO: can't yet handle the case where there are fewer observed firings than desired at the beginning
 #t_desired <- list(c(1,2,3), c(1.5, 3), c(4.2)) #A list of numeric vectors as long as the output layer, each giving a desired firing time.
-t_desired <- list(c(2)) #A list of numeric vectors as long as the output layer, each giving a desired firing time.
+t_desired <- list(c(4.5), c(0.5)) #A list of numeric vectors as long as the output layer, each giving a desired firing time.
 
 t_ns <- sapply(t_desired, length)
 
 iters <- 1000
-learn_rate <- 1000
+learn_rate <- 10
 last_Ws <- Ws
 grad_norm <- Inf
 
 for (iter in 1:iters) {
     #Assumes at least 1 hidden layer
-    #ret <- gon(Ws, Fin)
     ret <- srm0_R(Ws, net_shape, Fin, t_steps, t_eps)
+
     Fout <- ret$Fout
     GAMMA <- ret$GAMMA
     GAMMAd <- ret$GAMMAd
@@ -95,16 +95,6 @@ for (iter in 1:iters) {
     #d_h <- lapply(n_h, function(h) matrix(NA, nrow = h, ncol = n_out))
     # Still assumes 1 hidden layer
     d_h <- lapply(1:n_out, function(on) lapply(1:t_ns[on], function(f) lapply(n_h, function(h) rep(NA, h))))
-    #for (l in length(n_h):1) {
-    #    for (neur in 1:n_h[l]) {
-    #        #TODO: d_out not good for more than 1 hidden layer
-    #        #d_h[[l]][neur] <-  d_out * (GAMMAd[[l+1]][neur,tai] * sum(Ws[[l+1]][neur,]))  /
-    #        #    t(Ws[[l]][,neur]) %*% GAMMAd[[l]][,tai]
-    #        # TODO: The other 1 says "only look at the first firing event"
-    #        #d_h[[l]][neur,] <-  d_out * (GAMMAd[[1]][[1]][[l+1]][neur] * sum(Ws[[l+1]][neur,]))  /
-    #        #    t(Ws[[l]][,neur]) %*% GAMMAd[[1]][[1]][[l]]
-    #    }
-    #}
     for (n in 1:n_out) {
         for (fi in 1:t_ns[n]) {
             for (l in length(n_h):1) {
@@ -125,19 +115,6 @@ for (iter in 1:iters) {
             }
         }
     }
-
-    # Delta is organized as such
-    # delta[on] gives the delta related to firing events for output neuron "on"
-    # delta[on][fi] gives the delta related to the fi'th firing event for output neuron "on"
-    # delta[on][fi][l] gives the delta's in layer l (INDEXED IN REVERSE) related to the fi'th firing event for output neuron "on"
-    # delta[on][fi][l][h] gives the deltas in neuron h of layer l (INDEXED IN REVERSE) related to the fi'th firing event for output neuron "on"
-    #delta <- d_h
-    #for (n in 1:n_out) {
-    #    for (fi in 1:t_ns[n]) {
-    #        delta[[n]][[fi]][[length(n_h)+1]] <- d_out[[n]][[fi]]
-    #    }
-
-    #}
 
     # Calculate weight updates, and apply them
     last_Ws <- Ws

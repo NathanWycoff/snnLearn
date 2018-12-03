@@ -7,8 +7,6 @@ source('R/srm.R')
 I_0 <- 1 #Stimulation
 tau <- 1
 n_neurons <- 3
-ipostkern <- function(dt) as.numeric(dt>=0) * tau * (1 - exp(-dt/tau))# Integrated kernel
-iprekern <- function(dt) as.numeric(dt>=0) * -v_thresh# Integrated kernel
 
 t_eps <- 0.001
 t_end <- 3.5
@@ -20,7 +18,7 @@ v_reset <- 0
 
 n_in <- 2
 n_out <- 2
-n_h <- c(1)
+n_h <- c(10, 5)
 net_shape <- c(n_in, n_h, n_out)
 layers <- 2 + length(n_h)
 #Ws <- list(matrix(c(3.5), ncol = 1), matrix(c(3), ncol = 1))
@@ -37,7 +35,7 @@ Ws <- lapply(1:(length(sizes)-1), function(i)
 
 dyn.load('src/srm0.so')
 
-a <- srm0_cu(Ws, net_shape, Fin, t_steps, t_eps)
+system.time(a <- srm0_cu(Ws, net_shape, Fin, t_steps, t_eps))
 #a <- srm0_R(Ws, Fin, t_steps)
 #b <- srm0_R(Ws, net_shape, Fin, t_steps, t_eps)[[1]][[layers]]
-b <- srm0_R(Ws, net_shape, Fin, t_steps, t_eps)
+system.time(b <- srm0_R(Ws, net_shape, Fin, t_steps, t_eps))

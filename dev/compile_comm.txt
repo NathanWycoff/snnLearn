@@ -17,4 +17,4 @@ nvcc -O3 -arch=sm_35 -G -I/usr/local/cuda-9.0/include \
     -fPIC src/srm0.cu src/srm0_R_wrapper.cu -o src/srm0.so 
 
 # On pascal (cpp interface):
-nvcc -std=c++11 -I/home/nathw95/snnLearn/src/ src/srm0.cu src/srm0_cpp_wrapper.cu -o groovy_program
+nvcc -g -G -std=c++11 -I/home/nathw95/snnLearn/src/ src/srm0.cu src/srm0_cpp_wrapper.cu -o groovy_program
