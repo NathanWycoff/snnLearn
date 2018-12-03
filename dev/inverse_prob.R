@@ -18,35 +18,35 @@ v_thresh <- 1.5
 v_reset <- 0
 
 n_in <- 3
-n_out <- 2
+n_out <- 1
 n_h <- c(3, 2)
 net_shape <- c(n_in, n_h, n_out)
 n_layers <- 2 + length(n_h)
 #Ws <- list(matrix(c(3.5), ncol = 1), matrix(c(3), ncol = 1))
 
 # Seed all random things:
-set.seed(123)
+set.seed(1234)
 
 # Generate random wieghts
 sizes <- c(n_in, n_h, n_out)
 Ws <- lapply(1:(length(sizes)-1), function(i) 
-             matrix(rnorm(sizes[i]*sizes[i+1], 3), nrow = sizes[i], ncol = sizes[i+1]))
+             matrix(rnorm(sizes[i]*sizes[i+1], 1.2), nrow = sizes[i], ncol = sizes[i+1]))
 
 # Fire with uniform probabily on the interval, with a uniform number of firing events with max_input_fire max and 0 min
 max_input_fire <- 10
 Fin <- lapply(1:n_in, function(n) runif(sample(max_input_fire, 1), 0, t_end))
-
 
 ret <- srm0_R(Ws, net_shape, Fin, t_steps, t_eps)
 
 #TODO: generalize t_desired to multiple per point
 #TODO: can't yet handle the case where there are fewer observed firings than desired at the beginning
 #t_desired <- list(c(1,2,3), c(1.5, 3), c(4.2)) #A list of numeric vectors as long as the output layer, each giving a desired firing time.
-t_desired <- list(c(1), c(4)) #A list of numeric vectors as long as the output layer, each giving a desired firing time.
+t_desired <- list(c(2)) #A list of numeric vectors as long as the output layer, each giving a desired firing time.
+
 t_ns <- sapply(t_desired, length)
 
 iters <- 1000
-learn_rate <- 1
+learn_rate <- 1000
 last_Ws <- Ws
 grad_norm <- Inf
 
@@ -142,6 +142,7 @@ for (iter in 1:iters) {
     # Calculate weight updates, and apply them
     last_Ws <- Ws
     grad_norm <- 0
+    grad <- list()
     for (wi in 1:length(Ws)) {
         #Wd <- -t(delta[[wi]]) %x% GAMMA[[wi]][,tai]
 
@@ -161,7 +162,8 @@ for (iter in 1:iters) {
                     Wd <- Wd + t(d_out[[on]][[fi]]) %x% GAMMA[[on]][[fi]][[wi]] 
                 }
                 Wd <- Wd / sum(t_ns)
-                grad_norm <- grad_norm + sum(Wd^2)
+                grad[[length(grad)+1]] <- Wd
+                grad_norm <- grad_norm + sum(abs(Wd))
                 Ws[[wi]][,on] <- Ws[[wi]][,on] - learn_rate * Wd
             }
         } else {
@@ -179,8 +181,10 @@ for (iter in 1:iters) {
             }
             # Scale by number of output neurons to keep gradient size similar
             Wd <- Wd / sum(t_ns)
-            grad_norm <- grad_norm + sum(Wd^2)
+            grad[[length(grad)+1]] <- Wd
+            grad_norm <- grad_norm + sum(abs(Wd))
             Ws[[wi]] <- Ws[[wi]] - learn_rate * Wd
         }
     }
+    #print(grad)
 } 
