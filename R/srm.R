@@ -3,7 +3,7 @@
 
 source('R/lib.R')
 
-srm0_R <- function(Ws, net_shape, Fin, t_steps, t_eps, tau = 1, v_thresh = 1.5) {
+srm0_R <- function(Ws, net_shape, Fin, t_steps, t_eps, tau = 1, v_thresh = 1.5, debug = 0, copy_gamma = FALSE) {
     ts <- seq(0, t_eps * (t_steps-1), by = t_eps)
     ipostkern <- function(dt) as.numeric(dt>=0) * tau * (1 - exp(-dt/tau))# Integrated kernel
     postkern <- function(dt) as.numeric(dt>=0) * exp(-dt/tau)# Simply the kernel itself
@@ -45,8 +45,10 @@ srm0_R <- function(Ws, net_shape, Fin, t_steps, t_eps, tau = 1, v_thresh = 1.5) 
     ALPHA[[length(n_h) + 2]] <- matrix(NA, nrow = n_out, ncol = t_steps)
 
     ## Initialize synaptic contribution storage
-    GAMMA <- lapply(1:n_out, function(i) list())
-    GAMMAd <- lapply(1:n_out, function(i) list())
+    if (copy_gamma) {
+        GAMMA <- lapply(1:n_out, function(i) list())
+        GAMMAd <- lapply(1:n_out, function(i) list())
+    }
 
     ## Initialize integrated refractory kernel
     OMEGA <- list()
@@ -101,7 +103,7 @@ srm0_R <- function(Ws, net_shape, Fin, t_steps, t_eps, tau = 1, v_thresh = 1.5) 
                 if (Vs[[l]][n,ti+1] > v_thresh) {
                     Fcal[[l+1]][[n]] <- c(Fcal[[l+1]][[n]], t + t_eps)
                     # Record additional information if its an output neuron
-                    if (l == n_layers-1) {
+                    if (copy_gamma && l == n_layers-1) {
                         GAMMA[[n]][[length(GAMMA[[n]])+1]] <- lapply(1:n_layers, function(l) 
                                                                    sapply(Fcal[[l]], function(Fc) sum(as.numeric(sapply(Fc, function(tf) postkern(t + t_eps - tf))))))
                         GAMMAd[[n]][[length(GAMMAd[[n]])+1]] <- lapply(1:n_layers, function(l) 
@@ -113,11 +115,15 @@ srm0_R <- function(Ws, net_shape, Fin, t_steps, t_eps, tau = 1, v_thresh = 1.5) 
 
         t <- t + t_eps
     }
-    return(list(Fout = Fcal[[n_layers]], GAMMA = GAMMA, GAMMAd = GAMMAd))
+    if (copy_gamma) {
+        return(list(Fout = Fcal[[n_layers]], GAMMA = GAMMA, GAMMAd = GAMMAd))
+    } else {
+        return(list(Fout = Fcal[[n_layers]]))
+    }
 }
 
 #' Wrapper for the SRM0 model written in cuda/C
-srm0_cu <- function(Ws, net_shape, Fin, t_steps, t_eps, debug_in = 0) {
+srm0_cu <- function(Ws, net_shape, Fin, t_steps, t_eps, debug_in = 0, copy_gamma_in = FALSE) {
 
     # Calculate maximum firing times for each neuron
     f_max <- predict_fire_counts(Ws, Fin)
@@ -133,6 +139,7 @@ srm0_cu <- function(Ws, net_shape, Fin, t_steps, t_eps, debug_in = 0) {
     gamma <- rep(-1, sum(net_shape) * sum(f_max[[length(f_max)]]))
     gammad <- rep(-1, sum(net_shape) * sum(f_max[[length(f_max)]]))
     debug <- c(debug_in)
+    copy_gamma <- c(copy_gamma_in)
 
     rst <- .C("gvectorAdd",
        as.double(w),
@@ -146,7 +153,12 @@ srm0_cu <- function(Ws, net_shape, Fin, t_steps, t_eps, debug_in = 0) {
        as.double(t_eps),
        as.double(gamma),
        as.double(gammad),
-       as.integer(debug));
+       as.integer(debug),
+       as.logical(copy_gamma));
+
+    if (debug >= 1) {
+        print("R has control.")
+    }
 
     # Unpack some results
     Flast_d <- rst[[7]]
@@ -185,5 +197,9 @@ srm0_cu <- function(Ws, net_shape, Fin, t_steps, t_eps, debug_in = 0) {
             GAMMAd[[n]] <- GAMMAd[[n]][which(Fout[[n]]!=-1)]
         }
     }
-    return(list(Fout = Fout, GAMMA = GAMMA, GAMMAd = GAMMAd))
+    if (copy_gamma) {
+        return(list(Fout = Fout, GAMMA = GAMMA, GAMMAd = GAMMAd))
+    } else {
+        return(list(Fout = Fout))
+    }
 }

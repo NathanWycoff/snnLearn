@@ -63,7 +63,7 @@ double inner_prod(double *x, double *y, int n) {
 
 __global__
 void par_c_main_loop(double ***Vs, double ***ALPHA, double ***OMEGA, double ***Fcal, int **f_count, double ***Ws, int* net_shape, int n_layers, 
-        int t_steps, double t_eps, int l, double ****GAMMA, double ****GAMMAd) {
+        int t_steps, double t_eps, int l, double ****GAMMA, double ****GAMMAd, const bool copy_gamma) {
     double t;
     int index = blockIdx.x * blockDim.x + threadIdx.x;
     int stride = blockDim.x * gridDim.x;
@@ -97,7 +97,7 @@ void par_c_main_loop(double ***Vs, double ***ALPHA, double ***OMEGA, double ***F
                 // Check for firing neurons
                 if (Vs[l-1][n][ti+1] > V_THRESH) {
                     // If an output fire, record the neural state
-                    if (l == n_layers-1) {
+                    if (copy_gamma && l == n_layers-1) {
                         for (int l1 = 0; l1 < n_layers; l1++) {
                             for (int h = 0; h < net_shape[l1]; h++) {
                                 GAMMA[n][f_count[l][n]][l1][h] = 0;
@@ -121,9 +121,9 @@ void par_c_main_loop(double ***Vs, double ***ALPHA, double ***OMEGA, double ***F
 
 
 // The main simulation, using armadillo for matrix multiplication, and organized in such a way that we solve a sequence embarassingly parallelizable problems.
-double **par_sim_body_c(int *net_shape, int n_layers,
+double **par_sim_body_c(int *net_shape, const int n_layers,
         double **Fin, int *f_count_in, long long int **f_max, double ***Ws,
-        int** f_count, int t_steps, double t_eps, double ****GAMMA, double ****GAMMAd, int debug) {
+        int** f_count, const int t_steps, const double t_eps, double ****GAMMA, double ****GAMMAd, const int debug, const bool copy_gamma) {
 
     // Get the layer with the most neurons
     int max_neur = 0;
@@ -322,9 +322,7 @@ double **par_sim_body_c(int *net_shape, int n_layers,
         if (debug >= 1) 
             printf(" Solving Layer %d...\n", l);
         par_c_main_loop<<<n_blocks, THREADS_PER_BLOCK>>>(Vs, ALPHA, OMEGA, u_Fcal, u_f_count, u_Ws, u_net_shape, n_layers, 
-                t_steps, t_eps, l, d_GAMMA, d_GAMMAd);
-        //par_c_main_loop<<<1, 1>>>(Vs, ALPHA, OMEGA, u_Fcal, u_f_count, u_Ws, u_net_shape, n_layers, 
-        //        t_steps, l);
+                t_steps, t_eps, l, d_GAMMA, d_GAMMAd, copy_gamma);
     }
     cudaDeviceSynchronize();
 
@@ -381,6 +379,10 @@ double **par_sim_body_c(int *net_shape, int n_layers,
         cudaMemcpy(f_count[l], u_f_count[l], net_shape[l] * sizeof(int), cudaMemcpyDefault);
     }
 
+    if (debug >= 1) 
+        printf("After output spike spike/f_count\n");
+
+#if false
     // Copy to host memory
     // d_GAMMA[on][fi][l]][[h] Gives the instantaneous postsynaptic current of neuron h of layer l to firing time fi of output neuron on.
     //GAMMA = (double****)malloc((n_layers-1) * sizeof(double***));
@@ -400,9 +402,10 @@ double **par_sim_body_c(int *net_shape, int n_layers,
         }
     }
 
+#endif
 
     if (debug >= 1) 
-        printf("After ouptut spike copy\n");
+        printf("After GAMMA copy\n");
 
     //TODO: copy f_count
 

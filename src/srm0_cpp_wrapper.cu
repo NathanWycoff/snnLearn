@@ -17,6 +17,8 @@
 int main () {
     // Read in weight matrix and store as array.
     std::ifstream input_ws("weights_file.dat");
+
+    bool copy_gamma = false;
     
     //std::string line;
     //for (std::string line; getline(input_ws, line); ) {
@@ -175,12 +177,13 @@ int main () {
     printf("t_steps: %d", t_steps);
     printf("t_eps: %f", t_eps);
 
+    int debug = 1;
     double **Fout;
     int **f_count = (int **)calloc(net_shape.size(), sizeof(int *));
     double ****GAMMA = (double****)malloc((net_shape.size()-1) * sizeof(double***));
     double ****GAMMAd = (double****)malloc((net_shape.size()-1) * sizeof(double***));
     Fout = par_sim_body_c(&net_shape[0], net_shape.size(), Fin_c, 
-            f_count_in, f_max, Ws_c, f_count, t_steps, t_eps, GAMMA, GAMMAd);
+            f_count_in, f_max, Ws_c, f_count, t_steps, t_eps, GAMMA, GAMMAd, debug, copy_gamma);
 
     // Print out the results
     //for (int l = 0; l < net_shape.size(); l++) {
@@ -200,17 +203,38 @@ int main () {
 
     //TODO: free things at some point.
 
-    // Print out GAMMA
-    // d_GAMMA[on][fi][l]][[h] Gives the instantaneous postsynaptic current of neuron h of layer l to firing time fi of output neuron on.
-    for (int on = 0; on < net_shape[n_layers-1]; on++) {
-        for (int fi = 0; fi < f_max[n_layers-1][on]; fi++) {
-            for (int l = 0; l < n_layers; l++) {
-                for (int h = 0; h < net_shape[l]; h++) {
+    // Count up occurences
+    int *cum_shape = (int *)calloc((n_layers+1), sizeof(int));
+    for (int l = 0; l < n_layers; l++) {
+        cum_shape[l+1] = net_shape[l] + cum_shape[l];
+    }
+    // Cumulative Firing events for the output layer
+    int *fire_cum =  (int *)calloc(net_shape[n_layers-1]+1, sizeof(int));
+    for (int n = 0; n < net_shape[n_layers-1]; n++) {
+        fire_cum[n+1] = f_max[n_layers-1][n] + fire_cum[n];
+    }
+
+    double *gamma = (double *)malloc(fire_cum[net_shape[n_layers-1]] * cum_shape[n_layers] * sizeof(double));
+    double *gammad = (double *)malloc(fire_cum[net_shape[n_layers-1]] * cum_shape[n_layers] * sizeof(double));
+    if (copy_gamma) {
+        for (int on = 0; on < net_shape[n_layers-1]; on++) {
+            //printf("ON: %d\n", on);
+            for (int fi = 0; fi < f_max[n_layers-1][on]; fi++) {
+                //printf("fi: %d\n", fi);
+                for (int l = 0; l < n_layers; l++) {
+                    //printf("l: %d\n", l);
+                    for (int h = 0; h < net_shape[l]; h++) {
+                        //printf("G: %f|| dG: %f\n", GAMMA[on][fi][l][h], GAMMAd[on][fi][l][h]);
+                        int ind = (fire_cum[on] + fi) * cum_shape[n_layers] + cum_shape[l] + h;
+                        //printf("Total Capacity: %d", fire_cum[net_shape[n_layers-1]] * cum_shape[n_layers]);
+                        //printf("Realized Capacity: %d", ind);
+                        gamma[ind] = GAMMA[on][fi][l][h];
+                        gammad[ind] = GAMMAd[on][fi][l][h];
+                    }
                 }
             }
         }
     }
-
 
     return 0;
 }

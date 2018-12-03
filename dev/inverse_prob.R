@@ -17,9 +17,9 @@ t_steps <- length(ts)
 v_thresh <- 1.5
 v_reset <- 0
 
-n_in <- 100
+n_in <- 5
 n_out <- 2
-n_h <- c(30, 20)
+n_h <- c(10, 10)
 net_shape <- c(n_in, n_h, n_out)
 n_layers <- 2 + length(n_h)
 #Ws <- list(matrix(c(3.5), ncol = 1), matrix(c(3), ncol = 1))
@@ -30,13 +30,15 @@ set.seed(1234)
 # Generate random wieghts
 sizes <- c(n_in, n_h, n_out)
 Ws <- lapply(1:(length(sizes)-1), function(i) 
-             matrix(rnorm(sizes[i]*sizes[i+1], 1.2), nrow = sizes[i], ncol = sizes[i+1]))
+             matrix(rnorm(sizes[i]*sizes[i+1], 1.5), nrow = sizes[i], ncol = sizes[i+1]))
 
 # Fire with uniform probabily on the interval, with a uniform number of firing events with max_input_fire max and 0 min
 max_input_fire <- 10
 Fin <- lapply(1:n_in, function(n) runif(sample(max_input_fire, 1), 0, t_end))
 
-ret <- srm0_R(Ws, net_shape, Fin, t_steps, t_eps)
+dyn.load('src/srm0.so')
+system.time(ret <- srm0_R(Ws, net_shape, Fin, t_steps, t_eps))
+system.time(ret <- srm0_cu(Ws, net_shape, Fin, t_steps, t_eps))
 
 #TODO: generalize t_desired to multiple per point
 #TODO: can't yet handle the case where there are fewer observed firings than desired at the beginning
@@ -52,7 +54,8 @@ grad_norm <- Inf
 
 for (iter in 1:iters) {
     #Assumes at least 1 hidden layer
-    ret <- srm0_R(Ws, net_shape, Fin, t_steps, t_eps)
+    #ret <- srm0_R(Ws, net_shape, Fin, t_steps, t_eps)
+    ret <- srm0_cu(Ws, net_shape, Fin, t_steps, t_eps)
 
     Fout <- ret$Fout
     GAMMA <- ret$GAMMA

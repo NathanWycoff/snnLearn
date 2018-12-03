@@ -3,8 +3,8 @@
 #ifndef SRM0_H
 #define SRM0_H
 
-double **par_sim_body_c(int *net_shape, int n_layers,
+double **par_sim_body_c(int *net_shape, const int n_layers,
         double **Fin, int *f_count_in, long long int **f_max, double ***Ws,
-        int** f_count, int t_steps, double t_eps, double ****GAMMA, double ****GAMMAd, int debug);
+        int** f_count, const int t_steps, const double t_eps, double ****GAMMA, double ****GAMMAd, const int debug, const bool copy_gamma);
 
 #endif

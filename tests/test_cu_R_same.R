@@ -35,7 +35,7 @@ Ws <- lapply(1:(length(sizes)-1), function(i)
 
 dyn.load('src/srm0.so')
 
-system.time(a <- srm0_cu(Ws, net_shape, Fin, t_steps, t_eps))
+system.time(a <- srm0_cu(Ws, net_shape, Fin, t_steps, t_eps, debug = 1))
 #a <- srm0_R(Ws, Fin, t_steps)
 #b <- srm0_R(Ws, net_shape, Fin, t_steps, t_eps)[[1]][[layers]]
 system.time(b <- srm0_R(Ws, net_shape, Fin, t_steps, t_eps))
