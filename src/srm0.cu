@@ -62,7 +62,7 @@ double inner_prod(double *x, double *y, int n) {
 }
 
 __global__
-void par_c_main_loop(double ***ALPHA, double ***OMEGA, double ***Fcal, int **f_count, double ***Ws, int* net_shape, int n_layers, 
+void par_c_main_loop(double ***ALPHA, double ***Fcal, int **f_count, double ***Ws, int* net_shape, int n_layers, 
         int t_steps, double t_eps, int l, double ****GAMMA, double ****GAMMAd, const bool copy_gamma) {
     double t;
     int index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -82,15 +82,14 @@ void par_c_main_loop(double ***ALPHA, double ***OMEGA, double ***Fcal, int **f_c
             if (l > 0) {
                 // Update refractory contribution
                 n_f = f_count[l][n];
-                double ref = 0;
+                double refr = 0;
                 for (int tfi = 0; tfi < n_f; tfi++) {
                     double tf = Fcal[l][n][tfi];
-                    ref += iprekern(t - tf);
+                    refr += iprekern(t - tf);
                 }
-                OMEGA[l-1][n][ti] = ref;
 
                 // Update potential
-                double V_n = inner_prod(Ws[l-1][n], ALPHA[l-1][ti], net_shape[l-1]) + OMEGA[l-1][n][ti];
+                double V_n = inner_prod(Ws[l-1][n], ALPHA[l-1][ti], net_shape[l-1]) + refr;
                 //printf("l = %d, n = %d, ti = %d", l, n, ti);
                 //printf("Vsl = %d, n = %d, ti = %d", l, n, ti);
 
@@ -214,15 +213,24 @@ double **par_sim_body_c(int *net_shape, const int n_layers,
         cudaMallocManaged(&Fi, net_shape[l+1] * sizeof(double *));
         u_Fcal[l+1] = Fi;
 
+
         //double **Fi = (double **) calloc(net_shape[l+1], sizeof(double *));
         int *f_countl;
         cudaMallocManaged(&f_countl, net_shape[l+1] * sizeof(int));
         cudaMemcpy(&u_f_count[l+1], &f_countl, sizeof(int *), cudaMemcpyDefault);
         for (int n = 0; n < net_shape[l+1]; n++) {
+            // Init fire counts at 0.
+            u_f_count[l+1][n] = 0;
+
             double *Fln;
+            //printf("Number A\n");
+            //printf("%d\n", f_max[l+1][n]);
+            //printf("Number Z\n");
             cudaMallocManaged(&Fln, f_max[l+1][n] * sizeof(double));
+            //printf("Number B\n");
             Fi[n] = Fln;
-            // Initialize storeage to -1, so any negative firing time means 
+            //printf("Number C\n");
+            // Initialize storeage to -1, so any negative firing time means did not fire.
             for (int f = 0; f < f_max[l+1][n]; f++) {
                 Fi[n][f] = -1;
             }
@@ -303,7 +311,7 @@ double **par_sim_body_c(int *net_shape, const int n_layers,
         if (debug >= 1) 
             printf(" Solving Layer %d...\n", l);
 
-        par_c_main_loop<<<n_blocks, THREADS_PER_BLOCK>>>(ALPHA, OMEGA, u_Fcal, u_f_count, u_Ws, u_net_shape, n_layers, 
+        par_c_main_loop<<<n_blocks, THREADS_PER_BLOCK>>>(ALPHA, u_Fcal, u_f_count, u_Ws, u_net_shape, n_layers, 
                 t_steps, t_eps, l, d_GAMMA, d_GAMMAd, copy_gamma);
 
         cudaDeviceSynchronize();
@@ -350,37 +358,35 @@ double **par_sim_body_c(int *net_shape, const int n_layers,
 
     // Copy f_count to host memory
     for (int l = 0; l < n_layers; l++) {
-        f_count[l] = (int *)malloc(net_shape[l] * sizeof(int));
+        f_count[l] = (int *)calloc(net_shape[l], sizeof(int));
         cudaMemcpy(f_count[l], u_f_count[l], net_shape[l] * sizeof(int), cudaMemcpyDefault);
     }
 
     if (debug >= 1) 
         printf("After output spike spike/f_count\n");
 
-#if false
     // Copy to host memory
     // d_GAMMA[on][fi][l]][[h] Gives the instantaneous postsynaptic current of neuron h of layer l to firing time fi of output neuron on.
     //GAMMA = (double****)malloc((n_layers-1) * sizeof(double***));
     //GAMMAd = (double****)malloc((n_layers-1) * sizeof(double***));
-    for (int on = 0; on < net_shape[n_layers-1]; on++) {
-        GAMMA[on] = (double***)malloc(f_max[n_layers-1][on] * sizeof(double**));
-        GAMMAd[on] = (double***)malloc(f_max[n_layers-1][on] * sizeof(double**));
-        for (int fi = 0; fi < f_max[n_layers-1][on]; fi++) {
-            GAMMA[on][fi] = (double**)malloc(n_layers * sizeof(double*));
-            GAMMAd[on][fi] = (double**)malloc(n_layers * sizeof(double*));
-            for (int l = 0; l < n_layers; l++) {
-                GAMMA[on][fi][l] = (double*)malloc(net_shape[l] * sizeof(double));
-                GAMMAd[on][fi][l] = (double*)malloc(net_shape[l] * sizeof(double));
-                cudaMemcpy(GAMMA[on][fi][l], d_GAMMA[on][fi][l], net_shape[l] * sizeof(double), cudaMemcpyDefault);
-                cudaMemcpy(GAMMAd[on][fi][l], d_GAMMAd[on][fi][l], net_shape[l] * sizeof(double), cudaMemcpyDefault);
+    if (copy_gamma) {
+        for (int on = 0; on < net_shape[n_layers-1]; on++) {
+            GAMMA[on] = (double***)malloc(f_max[n_layers-1][on] * sizeof(double**));
+            GAMMAd[on] = (double***)malloc(f_max[n_layers-1][on] * sizeof(double**));
+            for (int fi = 0; fi < f_max[n_layers-1][on]; fi++) {
+                GAMMA[on][fi] = (double**)malloc(n_layers * sizeof(double*));
+                GAMMAd[on][fi] = (double**)malloc(n_layers * sizeof(double*));
+                for (int l = 0; l < n_layers; l++) {
+                    GAMMA[on][fi][l] = (double*)malloc(net_shape[l] * sizeof(double));
+                    GAMMAd[on][fi][l] = (double*)malloc(net_shape[l] * sizeof(double));
+                    cudaMemcpy(GAMMA[on][fi][l], d_GAMMA[on][fi][l], net_shape[l] * sizeof(double), cudaMemcpyDefault);
+                    cudaMemcpy(GAMMAd[on][fi][l], d_GAMMAd[on][fi][l], net_shape[l] * sizeof(double), cudaMemcpyDefault);
+                }
             }
         }
+        if (debug >= 1) 
+            printf("After GAMMA copy\n");
     }
-
-#endif
-
-    if (debug >= 1) 
-        printf("After GAMMA copy\n");
 
     //TODO: copy f_count
 

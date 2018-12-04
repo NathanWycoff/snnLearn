@@ -144,40 +144,41 @@ int main () {
     //    std::cout << f_count_in[n] << std::endl;
     //}
 
-    // Do SRM0 simulation
+    //// Do SRM0 simulation
     int t_steps = 35;
     double t_eps = 0.1;
-    printf("Input validation:\n");
-    printf("n_layers: %d", n_layers);
-    printf("net_shape:\n");
-    for (int l = 0; l < n_layers; l++) {
-        printf("l %d = %d\n", l, net_shape[l]);
-    }
-    printf("Ws: \n");
-    // Print off Ws
-    for (int l = 0; l < n_layers-1; l++) {
-        printf("Layer %d\n", l);
-        for (int n1 = 0; n1 < net_shape[l+1]; n1++) {
-            printf("Col %d\n", n1);
-            for (int n2 = 0; n2 < net_shape[l]; n2++) {
-                printf("Row %d\n", n2);
-                printf("Val: %f\n", Ws_c[l][n1][n2]);
-            }
-        }
-    }
-    printf("Fin_c:\n");
-    for (int n = 0; n < net_shape[0]; n++) {
-        printf("Neuron %d:\n", n);
-        for (int f = 0; f < f_count_in[n]; f++) {
-            printf("Firing time %d: %f\n", n, Fin_c[n][f]);
-        }
-    }
-    printf("Scalar things:");
-    printf("n_layers: %d", n_layers);
-    printf("t_steps: %d", t_steps);
-    printf("t_eps: %f", t_eps);
 
-    int debug = 1;
+    //printf("Input validation:\n");
+    //printf("n_layers: %d", n_layers);
+    //printf("net_shape:\n");
+    //for (int l = 0; l < n_layers; l++) {
+    //    printf("l %d = %d\n", l, net_shape[l]);
+    //}
+    //printf("Ws: \n");
+    //// Print off Ws
+    //for (int l = 0; l < n_layers-1; l++) {
+    //    printf("Layer %d\n", l);
+    //    for (int n1 = 0; n1 < net_shape[l+1]; n1++) {
+    //        printf("Col %d\n", n1);
+    //        for (int n2 = 0; n2 < net_shape[l]; n2++) {
+    //            printf("Row %d\n", n2);
+    //            printf("Val: %f\n", Ws_c[l][n1][n2]);
+    //        }
+    //    }
+    //}
+    //printf("Fin_c:\n");
+    //for (int n = 0; n < net_shape[0]; n++) {
+    //    printf("Neuron %d:\n", n);
+    //    for (int f = 0; f < f_count_in[n]; f++) {
+    //        printf("Firing time %d: %f\n", n, Fin_c[n][f]);
+    //    }
+    //}
+    //printf("Scalar things:");
+    //printf("n_layers: %d", n_layers);
+    //printf("t_steps: %d", t_steps);
+    //printf("t_eps: %f", t_eps);
+
+    int debug = 0;
     double **Fout;
     int **f_count = (int **)calloc(net_shape.size(), sizeof(int *));
     double ****GAMMA = (double****)malloc((net_shape.size()-1) * sizeof(double***));

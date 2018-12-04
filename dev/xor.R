@@ -1,58 +1,59 @@
 #!/usr/bin/Rscript
-#  dev/inverse_prob.R Author "Nathan Wycoff <nathanbrwycoff@gmail.com>" Date 12.03.2018
+#  dev/xor.R Author "Nathan Wycoff <nathanbrwycoff@gmail.com>" Date 12.03.2018
 
+## Solve the exclusive OR problem
 source('R/srm.R')
 
-## The Spike Response Model
-ipostkern <- function(dt) as.numeric(dt>=0) * tau * (1 - exp(-dt/tau))# Integrated kernel
-postkern <- function(dt) as.numeric(dt>=0) * exp(-dt/tau)# Simply the kernel itself
-dpostkernd <- function(dt) as.numeric(dt>=0) * (-1)/tau * exp(-dt/tau)# Derivative of the kernel 
-iprekern <- function(dt) as.numeric(dt>=0) * -v_thresh# Integrated kernel
-
-tau <- 1
 t_eps <- 0.01
-t_end <- 5
+t_end <- 10
 ts <- seq(0, t_end, by = t_eps)
 t_steps <- length(ts)
 
 v_thresh <- 1.5
 
-n_in <- 10
+n_in <- 2
 n_out <- 1
-n_h <- c(3, 3)
+n_h <- c(4)
 net_shape <- c(n_in, n_h, n_out)
 n_layers <- 2 + length(n_h)
 
 # Seed all random things:
-set.seed(12345)
+set.seed(123)
 # Generate random wieghts
 sizes <- c(n_in, n_h, n_out)
-#Ws <- init_weights(net_shape, a = 3, inter = 0.3)
-#Ws <- init_weights(net_shape, a = 3, inter = 0.3)
-Ws <- lapply(1:(length(sizes)-1), function(i) 
-             matrix(rgamma(net_shape[i]*net_shape[i+1],1,1), nrow = sizes[i], ncol = sizes[i+1]))
-Ws <- scale_Ws(Ws, Fin)
+Ws <- init_weights(net_shape, a = 3, inter = 1.5)
 
-# Fire with uniform probabily on the interval, with a uniform number of firing events with max_input_fire max and 0 min
-max_input_fire <- 10
-Fin <- lapply(1:n_in, function(n) runif(sample(max_input_fire, 1), 0, t_end))
-f_max <- predict_fire_counts(Ws, Fin)
-f_max[[n_layers]]
+# Different Fin
+F10 <- list(0, 3)
+F01 <- list(3, 0)
+F00 <- list(3, 3)
+F11 <- list(0, 0)
+Fins <- list(F10, F01, F00, F11)
 
-#TODO: can't yet handle the case where there are fewer observed firings than desired at the beginning
-#t_desired <- list(c(1,2,3), c(1.5, 3), c(4.2)) #A list of numeric vectors as long as the output layer, each giving a desired firing time.
-t_desired <- list(c(4.5)) #A list of numeric vectors as long as the output layer, each giving a desired firing time.
+targets <- list(list(5), list(5), list(9), list(9))
 
+# Iterate between the targets
 dyn.load('src/srm0.so')
-
-t_ns <- sapply(t_desired, length)
+f_max <- predict_fire_counts(Ws, Fins[[1]])
+ret <- srm0_cu(Ws, net_shape, Fins[[3]], t_steps, t_eps, copy_gamma = TRUE)
 
 iters <- 1000
-learn_rate <- 0.1
+learn_rate <- 0.01
 last_Ws <- Ws
-grad_norm <- Inf
+grad_norm <- 0
+max_gnorm <- 20
+accum <- 4 # Update params over these periods (minibatch size)
+Wds <- lapply(1:length(Ws), function(l) matrix(0, nrow = net_shape[l], ncol = net_shape[l+1]))
 
 for (iter in 1:iters) {
+
+    # Pick a set of targets for this round
+    ind <- (iter-1) %% 4 + 1
+    #ind <- 1
+    Fin <- Fins[[ind]]
+    t_desired <- targets[[ind]]
+    t_ns <- sapply(t_desired, length)
+
     #Assumes at least 1 hidden layer
     #ret <- srm0_R(Ws, net_shape, Fin, t_steps, t_eps, copy_gamma = TRUE)
     time <- Sys.time()
@@ -71,6 +72,7 @@ for (iter in 1:iters) {
     err <- sum(sapply(1:n_out, function(n) sum((t_actuals[[n]] - t_desired[[n]])^2)))
 
     print(paste("Iter:", iter, "has firing times", paste(t_actuals, collapse = ", "), "with gradient norm", grad_norm, "|| Error:", err, "|| Time:", Sys.time()-time))
+    print(paste("Index:", ind, "target:", t_desired))
 
     #TODO: Modify next line for firings per output
     if (any(sapply(Fout, length) - t_ns < 0)) {
@@ -121,8 +123,6 @@ for (iter in 1:iters) {
     }
 
     # Calculate weight updates, and apply them
-    last_Ws <- Ws
-    grad_norm <- 0
     grad <- list()
     for (wi in 1:length(Ws)) {
         #Wd <- -t(delta[[wi]]) %x% GAMMA[[wi]][,tai]
@@ -142,10 +142,11 @@ for (iter in 1:iters) {
                     # These are equivalent
                     Wd <- Wd + t(d_out[[on]][[fi]]) %x% GAMMA[[on]][[fi]][[wi]] 
                 }
-                Wd <- Wd / sum(t_ns)
+                Wd <- Wd / (accum*sum(t_ns))
                 grad[[length(grad)+1]] <- Wd
-                grad_norm <- grad_norm + sum(abs(Wd))
-                Ws[[wi]][,on] <- Ws[[wi]][,on] - learn_rate * Wd
+                grad_norm <- grad_norm + sum(Wd^2)
+                #Ws[[wi]][,on] <- Ws[[wi]][,on] - learn_rate * Wd
+                Wds[[wi]] <- Wds[[wi]] + Wd
             }
         } else {
             Wd <- 0
@@ -161,11 +162,27 @@ for (iter in 1:iters) {
                 }
             }
             # Scale by number of output neurons to keep gradient size similar
-            Wd <- Wd / sum(t_ns)
+            Wd <- Wd / (accum*sum(t_ns))
             grad[[length(grad)+1]] <- Wd
-            grad_norm <- grad_norm + sum(abs(Wd))
-            Ws[[wi]] <- Ws[[wi]] - learn_rate * Wd
+            grad_norm <- grad_norm + sum(Wd^2)
+            #Ws[[wi]] <- Ws[[wi]] - learn_rate * Wd
+            Wds[[wi]] <- Wds[[wi]] + Wd
         }
+    }
+
+
+    ## Update Weights
+    if ((iter-1) %% accum == 0) {
+        last_Ws <- Ws
+        if (grad_norm > max_gnorm) {
+            Wds <- lapply(Wds, function(Wd) Wd / sqrt(grad_norm) * max_gnorm)
+            print("Notice: Norm Truncated.")
+        }
+        for (wi in 1:length(Ws)) {
+            Ws[[wi]] <- Ws[[wi]] - learn_rate * Wds[[wi]]
+        }
+        Wds <- lapply(1:length(Ws), function(l) matrix(0, nrow = net_shape[l], ncol = net_shape[l+1]))
+        grad_norm <- 0
     }
     #print(grad)
 } 

@@ -17,8 +17,6 @@ void gvectorAdd(double *Ws_in, int *net_shape, int *n_layersp, double *Fin, int 
     int debug = *debug_R;
     bool copy_gamma = *copy_gamma_R;
 
-    printf("copy_gamma: %d\n", copy_gamma);
-
     // Calculate the cumulative size of each layer's weight matrix
     int *wlo = (int *)calloc(n_layers-1, sizeof(int *));
     wlo[0] = 0;
@@ -152,7 +150,6 @@ void gvectorAdd(double *Ws_in, int *net_shape, int *n_layersp, double *Fin, int 
     //    }
     //}
 
-    printf("A");
     if (copy_gamma) {
         // Count up occurences
         int *cum_shape = (int *)calloc((n_layers+1), sizeof(int));
@@ -185,15 +182,12 @@ void gvectorAdd(double *Ws_in, int *net_shape, int *n_layersp, double *Fin, int 
         }
     }
 
-    printf("B");
-
     // Print out fire counts
     if (debug > 0) {
         for (int n = 0; n < net_shape[n_layers-1]; n++) {
             printf("Output Neuron %d had %d firing events\n", n, f_count[n_layers-1][n]);
         }
     }
-    printf("C");
     //Flast = (double *)calloc(cum_fires[net_shape[n_layers-1]], sizeof(double));
     int counter = 0;
     for (int n = 0; n < net_shape[n_layers-1]; n++) {
@@ -204,5 +198,4 @@ void gvectorAdd(double *Ws_in, int *net_shape, int *n_layersp, double *Fin, int 
     }
 
     //TODO: free things at some point.
-    printf("D");
 }
